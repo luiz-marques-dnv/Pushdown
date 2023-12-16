@@ -127,7 +127,6 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     loadcase = loadCaseTimeDetails(0)
                     LoadCaseTime = loadCaseTimeDetails(1)
 
-                    
                     ' Update Head USFOS file
                     UpdateHeadUsfos row, LoadCaseTime
     
@@ -144,21 +143,20 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     ' Read elements above buckling criteria
                     ProcessBucklingCriteria iter
     
-                    If pfpEligibleElement.Strain > HighestStrain Then
-                        HighestStrain = pfpEligibleElement.Strain
-                        HighestElementStrain = pfpEligibleElement.Number
+                    If pfpEligibleElement.Strain <> 0> Then
+                        GoTo NextIteration
                     End If
                     
                     'Copying starin files just to check    TODO: Delete after checking
                     CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
-NextIteration:
+
                 Next loadCaseTimeDetails
-                
+NextIteration:
                 Debug.Print Timer - STartTime
-                Debug.Print "Highest: " & HighestStrain, HighestElementStrain
-                If HighestStrain <> 0 Then
+                
+                If pfpEligibleElement <> 0 Then
                     ' Write PFP element to the script file
-                    writePFPElement row, HighestElementStrain
+                    writePFPElement row, pfpEligibleElement
     
                     ' Update Fahts for on going cases
                     UpdateHeadFahts row
@@ -171,7 +169,7 @@ NextIteration:
                     ' Update Completion Status
                     shtScriptUsfos.Cells(row, "S") = "on going"
     
-                ElseIf HighestStrain = 0 Then
+                ElseIf pfpEligibleElement = 0 Then
                     shtScriptUsfos.Cells(row, "S") = "completed"
                 End If
 
