@@ -66,18 +66,7 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     Dim caseFolderPath As String
     Dim BeltempFilePath As String
     Dim loadCaseData As Collection
-    Dim loadCaseTimeDetails As Variant
-    Dim loadcase As Long
-    Dim LoadCaseTime As Double
-    Dim pfpEligibleElement As ElementType
-    Dim HighestStrain As Double
-    Dim HighestElementStrain As Long
-    Dim shellCommandUsfos As String
-    Dim shellCommandStrain As String
-    Dim shellCommandStrainNeg As String
-    Dim UsfosShell As Variant
-    Dim StrainShell As Variant
-    Dim StrainNegShell As Variant
+
     
     If iter = 1 Then
         'Defining commands paths to be run
@@ -118,45 +107,24 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                 'TODO: Change this to a class
                 InitializeCaseValues row, scenarioName, caseFolderPath, BeltempFilePath
     
-    
                 ' Extract the load case data from the Beltemp file
                 Set loadCaseData = ExtractLoadCaseData(BeltempFilePath)
-                
-                STartTime = Timer
-                For Each loadCaseTimeDetails In loadCaseData
-                    loadcase = loadCaseTimeDetails(0)
-                    LoadCaseTime = loadCaseTimeDetails(1)
 
-                    
-                    ' Update Head USFOS file
-                    UpdateHeadUsfos row, LoadCaseTime
-    
-                    ' Running Usfos
-                    ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
-    
-                    ' Running strain and Straing neg to get values outside criteria
-                    ExecuteProgram Program.Strain, caseFolderPath, scenarioName
-                    'ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
-                    
-                    ' Process strain criteria
-                    pfpEligibleElement = ProcessStrainCriteria(row)
-                    
-                    ' Read elements above buckling criteria
-                    ProcessBucklingCriteria iter
-    
-                    If pfpEligibleElement.Strain > HighestStrain Then
-                        HighestStrain = pfpEligibleElement.Strain
-                        HighestElementStrain = pfpEligibleElement.Number
-                    End If
-                    
-                    'Copying starin files just to check    TODO: Delete after checking
-                    CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
-NextIteration:
-                Next loadCaseTimeDetails
-                
-                Debug.Print Timer - STartTime
-                Debug.Print "Highest: " & HighestStrain, HighestElementStrain
-                If HighestStrain <> 0 Then
+                ' Get a subset from loadCaseData so less load cases are processed
+                Set filteredloadCaseData = GetFilteredLoadCaseData(loadCaseData)
+
+                HighestElementStrain = ExecuteCriteriasCheck row, filteredloadCaseData, scenarioName, caseFolderPath, iter
+
+                ' Check if the filtered load case data was enough to find a PFP element 
+                If HighestElementStrain = 0 Then
+
+                    ' Get the remaining load case data
+                    Set remainingloadCaseData = GetRemainingLoadCaseData(loadCaseData, filteredloadCaseData)
+
+                    ExecuteCriteriasCheck row, remainingloadCaseData, HighestStrain, HighestElementStrain, scenarioName, caseFolderPath, iter, loadcase, LoadCaseTime, pfpEligibleElement, loadCaseTimeDetails, loadCaseDataFiltered
+                End If
+
+                If HighestElementStrain <> 0 Then
                     ' Write PFP element to the script file
                     writePFPElement row, HighestElementStrain
     
@@ -171,7 +139,7 @@ NextIteration:
                     ' Update Completion Status
                     shtScriptUsfos.Cells(row, "S") = "on going"
     
-                ElseIf HighestStrain = 0 Then
+                ElseIf HighestElementStrain = 0 Then
                     shtScriptUsfos.Cells(row, "S") = "completed"
                 End If
 
@@ -187,6 +155,47 @@ NextIteration:
         'UpdateAndRunFahts iter
     End If
 End Sub
+
+Private ExecuteCriteriasCheck(ByVal row As Long, ByVal loadCaseData As Collection, ByVal scenarioName As String, ByVal caseFolderPath As String, ByVal iter As Long) As Long
+    ' This function executes the strain criteria and Buckling check for the load cases in the loadCaseData collection
+    Dim loadCaseTimeDetails As Variant
+    Dim loadcase As Long
+    Dim LoadCaseTime As Double
+    Dim pfpEligibleElement As ElementType
+    Dim HighestStrain As Double
+    Dim HighestElementStrain As Long
+
+    For Each loadCaseTimeDetails In loadCaseData
+            loadcase = loadCaseTimeDetails(0)
+            LoadCaseTime = loadCaseTimeDetails(1)
+
+            
+            ' Update Head USFOS file
+            UpdateHeadUsfos row, LoadCaseTime
+
+            ' Running Usfos
+            ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
+
+            ' Running strain and Straing neg to get values outside criteria
+            ExecuteProgram Program.Strain, caseFolderPath, scenarioName
+            'ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
+            
+            ' Process strain criteria
+            pfpEligibleElement = ProcessStrainCriteria(row)
+            
+            ' Read elements above buckling criteria
+            ProcessBucklingCriteria iter
+
+            If pfpEligibleElement.Strain > HighestStrain Then
+                HighestStrain = pfpEligibleElement.Strain
+                HighestElementStrain = pfpEligibleElement.Number
+            End If
+            
+            'Copying starin files just to check    TODO: Delete after checking
+            CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
+
+        Next loadCaseTimeDetails
+    ExecuteCriteriasCheck = HighestElementStrain
 
 Private Function ProcessStrainCriteria(ByVal row As Long) As ElementType
     Dim FileStrain As String
