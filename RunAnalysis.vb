@@ -438,33 +438,33 @@ ErrorHandler:
 End Function
 
 Private Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory As String, ByVal scenarioName As String)
-    Dim executable As String
-    Dim outputFileName As String
-    Dim inputFileName As String
-    Dim usfosBin As String
+    Dim executable, outputFileName, inputFileName, usfosBinFolder,fullCommand As String
+    Dim ShellResult As Variant
+    Dim InitShellTimer, elapsedShellTime As Double
+    Dim userResponse As Variant
     
-
-    usfosBin = shtScriptUsfos.Range("W1")
+    ' Get the path to the usfos bin folder
+    usfosBinFolder = shtScriptUsfos.Range("W1")
 
     Select Case programName
         Case Program.FAHTS
             executable = "..\Fahts\fahts_v670.exe"
             inputFileName = "input.inp"
-
+        
         Case Program.USFOS
-            executable = usfosBin & "\Usfos.exe"
+            executable = usfosBinFolder & "\Usfos.exe"
             executionCommand = " 400 > "
             outputFileName = scenarioName & "_usfos.trm"
             inputFileName = "usfos_input.inp"
 
         Case Program.Strain
-            executable = usfosBin & "\strain.exe"
+            executable = usfosBinFolder & "\strain.exe"
             executionCommand = " 400 > "
             outputFileName = scenarioName & "_strain.trm"
             inputFileName = "strain_input.inp"
 
         Case Program.SRAINNeg
-            executable = usfosBin & "\strain_neg.exe"
+            executable = usfosBinFolder & "\strain_neg.exe"
             executionCommand = " 400 > "
             outputFileName = scenarioName & "_strain_neg.trm"
             inputFileName = "strain_neg_input.inp"
@@ -474,10 +474,32 @@ Private Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory 
             Exit Sub
     End Select
 
-    Dim fullCommand As String
+    
     fullCommand = """" & executable & """" & executionCommand & outputFileName & " < " & inputFileName
-    Debug.Print (fullCommand)
-    ExecuteShellCommandHidden fullCommand, workingDirectory
+    
+    ' Initiate time to check if the program will execute normally.
+    ' This is an alternative choice since getting the output from shell would need much more unnecessary effort
+    InitShellTimer = Timer
+    
+    ' Use shell in hidden mode to execute a command
+    ShellResult = ExecuteShellCommandHidden(fullCommand, workingDirectory)
+    
+    ' Retrieve elepased time
+    elapsedShellTime = Timer - InitShellTimer
+    
+    ' Check if shell executed normally
+    If elapsedShellTime < 3 Then
+        ' The shell execution failured
+        userResponse = MsgBox("It is not possible to execute " & executable & vbNewLine & "Check license or path. Would you like to continue anyway?", vbCritical + vbYesNo)
+
+        If userResponse = vbNo Then
+            ' User chose to exit
+            End
+        ElseIf userResponse = vbYes Then
+            ' User chose to continue, you can add code here to handle this situation
+            Exit Sub
+        End If
+    End If
 End Sub
 
 
