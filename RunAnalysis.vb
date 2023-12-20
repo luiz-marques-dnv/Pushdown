@@ -64,20 +64,13 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     Dim row As Long
     Dim scenarioName As String
     Dim caseFolderPath As String
-    Dim BeltempFilePath As String
-    Dim loadCaseData As Collection
-    Dim loadCaseTimeDetails As Variant
-    Dim loadcase As Long
-    Dim LoadCaseTime As Double
-    Dim pfpEligibleElement As ElementType
-    Dim HighestStrain As Double
-    Dim HighestElementStrain As Long
-    Dim shellCommandUsfos As String
-    Dim shellCommandStrain As String
-    Dim shellCommandStrainNeg As String
-    Dim UsfosShell As Variant
-    Dim StrainShell As Variant
-    Dim StrainNegShell As Variant
+    Dim FahtsOutPath As String
+    Dim FahtsData As SimulationData
+    Dim BeltempData As Collection
+    Dim filteredloadCaseData As Collection
+    Dim remainingloadCaseData As Collection
+
+
     
     If iter = 1 Then
         'Defining commands paths to be run
@@ -116,47 +109,31 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
             If Not AuxMacros.IsCompleted(row) Then
                 ' Initialize values from the sheet
                 'TODO: Change this to a class
-                InitializeCaseValues row, scenarioName, caseFolderPath, BeltempFilePath
+                InitializeCaseValues row, scenarioName, caseFolderPath, FahtsOutPath
     
-    
+                ' Retrievieng some information from fahts output
+                FahtsData = ExtractDataFromFahtsOut(FahtsOutPath)
+
                 ' Extract the load case data from the Beltemp file
                 Set loadCaseData = ExtractLoadCaseData(BeltempFilePath)
                 
-                STartTime = Timer
-                For Each loadCaseTimeDetails In loadCaseData
-                    loadcase = loadCaseTimeDetails(0)
-                    LoadCaseTime = loadCaseTimeDetails(1)
+                Set BeltempData = GetBeltempData(FahtsData)
 
-                    
-                    ' Update Head USFOS file
-                    UpdateHeadUsfos row, LoadCaseTime
-    
-                    ' Running Usfos
-                    ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
-    
-                    ' Running strain and Straing neg to get values outside criteria
-                    ExecuteProgram Program.Strain, caseFolderPath, scenarioName
-                    'ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
-                    
-                    ' Process strain criteria
-                    pfpEligibleElement = ProcessStrainCriteria(row)
-                    
-                    ' Read elements above buckling criteria
-                    ProcessBucklingCriteria iter
-    
-                    If pfpEligibleElement.Strain > HighestStrain Then
-                        HighestStrain = pfpEligibleElement.Strain
-                        HighestElementStrain = pfpEligibleElement.Number
-                    End If
-                    
-                    'Copying starin files just to check    TODO: Delete after checking
-                    CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
-NextIteration:
-                Next loadCaseTimeDetails
-                
-                Debug.Print Timer - STartTime
-                Debug.Print "Highest: " & HighestStrain, HighestElementStrain
-                If HighestStrain <> 0 Then
+                ' Get a subset from loadCaseData so less load cases are processed
+                Set filteredloadCaseData = GetFilteredLoadCaseData(BeltempData)
+
+                HighestElementStrain = ExecuteCriteriasCheck row, filteredloadCaseData, scenarioName, caseFolderPath, iter
+
+                ' Check if the filtered load case data was enough to find a PFP element 
+                If HighestElementStrain = 0 Then
+
+                    ' Get the remaining load case data
+                    Set remainingloadCaseData = GetRemainingLoadCaseData(loadCaseData, filteredloadCaseData)
+
+                    ExecuteCriteriasCheck row, remainingloadCaseData, HighestStrain, HighestElementStrain, scenarioName, caseFolderPath, iter, loadcase, LoadCaseTime, pfpEligibleElement, loadCaseTimeDetails, loadCaseDataFiltered
+                End If
+
+                If HighestElementStrain <> 0 Then
                     ' Write PFP element to the script file
                     writePFPElement row, HighestElementStrain
     
@@ -559,6 +536,7 @@ Private Function ExtractLoadCaseData(ByVal BeltempFilePath As String) As Collect
     Set ExtractLoadCaseData = loadCaseData
 End Function
 
+
 Private Function GetNextLoadCaseTime(ByVal loadCaseData As Collection, ByVal lastLoadCaseTime As Double) As Double
     ' Get the next load case time based on the last load case time
     Dim loadCaseTimeDetails As Variant
@@ -718,15 +696,14 @@ Private Function CriteriaMet(iter) As Boolean
     
 End Function
 
-Private Sub InitializeCaseValues(ByVal row As Long, ByRef scenarioName, ByRef caseFolderPath As String, ByRef BeltempFilePath As String)
-    Dim BeltempFilename As String
-
+Private Sub InitializeCaseValues(ByVal row As Long, ByRef scenarioName, ByRef caseFolderPath As String, ByRef FahtsOutPath As String)
     ' Initialize and fetch values from the worksheet
     scenarioName = shtScriptUsfos.Cells(row, "B")
     
     caseFolderPath = CURRENT_FOLDER & "\" & shtScriptFaths.Cells(row, "A") & "_" & scenarioName
-    BeltempFilename = scenarioName & "_output_beltemp"
-    BeltempFilePath = caseFolderPath & "\" & BeltempFilename & ".fem"
+
+    FahtsOutPath = caseFolderPath & "\" & scenarioName & "_output.out"
+ 
 End Sub
 
 Sub CopyStrainFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal iter As Long, loadcase As Long)
@@ -777,5 +754,156 @@ Sub CopyFahtsOutFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal 
     FSObject.CopyFile SourceFilePath, DestinationFilePath, True
 End Sub
 
+' Function to extract data from the file
+Function ExtractDataFromFahtsOut(filePath As String) As SimulationData
+    Dim fileNum As Integer
+    Dim currentLine As String
+    Dim data As SimulationData
+    Dim record As StepRecord
+    Dim TrimLine As String
+    Dim parts() As String
+    Dim i As Integer
 
+
+    fileNum = FreeFile()
+    Open filePath For Input As #fileNum
+
+    Do Until EOF(fileNum)
+        Line Input #fileNum, currentLine
+
+        ' Retrive Number of time steps from the file
+        If InStr(currentLine, "Number of time steps") > 0 Then
+            ' remove extra spaces
+            TrimLine = WorksheetFunction.Trim(currentLine)
+            data.NumberOfTimeSteps = CDbl(Split(TrimLine, ":")(1))
+
+        ' Retrive Beltemp time steps from the file
+        ElseIf InStr(currentLine, "Time between *BELTEMP*") > 0 Then
+            ' remove extra spaces
+            TrimLine = WorksheetFunction.Trim(currentLine)
+            data.BeltempTimeInterval = CDbl(Split(TrimLine, ":")(1))
+
+        ' Retrive total simulation time from the file
+        ElseIf InStr(currentLine, "Total simulation time") > 0 Then
+            ' remove extra spaces
+            TrimLine = WorksheetFunction.Trim(currentLine)
+            data.TotalSimTime = CDbl(Split(TrimLine, ":")(1))
+
+        ' Retrive the data for each time step
+        ElseIf InStr(currentLine, "(s)      (J)          (W/m2)     (degr C)    (degr C)") > 0 Then
+            Line Input #fileNum, currentLine
+            Line Input #fileNum, currentLine
+            Line Input #fileNum, currentLine
+            ' remove extra spaces
+            TrimLine = WorksheetFunction.Trim(currentLine)
+            While Len(TrimLine) > 1
+                ' Split the line into different parts
+                parts = Split(TrimLine, " ")
+                ' Get the step number
+                record.StepNo = CInt(parts(0))
+                ' Get the time in seconds
+                record.TimeInSeconds = CDbl(parts(1))
+                ' Get the accumulated energy
+                record.AccumulatedEnergy = CDbl(parts(2))
+                ' Get the max heat input
+                record.MaxHeatInput = CDbl(parts(3))
+                ' Get the max temperature
+                record.MaxTemp = CDbl(parts(4))
+                ' Get the min temperature
+                record.MinTemp = CDbl(parts(5))
+
+                ' Add the record to the data
+                ReDim Preserve data.StepData(i)
+                data.StepData(i) = record
+                i = i + 1
+                Line Input #fileNum, currentLine
+                TrimLine = WorksheetFunction.Trim(currentLine)
+            Wend
+        End If
+    Loop
+
+    Close #fileNum
+
+    ExtractDataFromFahtsOut = data
+End Function
+
+' Function to calculate beltemp step
+Function CalculateBeltempStep(NumberOfTimeSteps As Double, TotalSimTime As Double, BeltempTimeInterval As Double) As Long
+    CalculateBeltempStep = CInt(Application.WorksheetFunction.RoundUp(NumberOfTimeSteps * BeltempTimeInterval / TotalSimTime, 0))
+End Function
+
+' Function to get simulation info
+Function GetSimulationInfo(data As SimulationData) As Variant
+    Dim result(2) As Double
+    result(0) = data.TotalSimTime
+    result(1) = data.NumberOfTimeSteps
+    result(2) = data.BeltempTimeInterval
+    GetSimulationInfo = result
+End Function
+
+' Function to get step temperature
+Function GetTemperatureFromTime(data As SimulationData, time As Double) As Double
+    ' using linear search
+    ' TODO: use binary search
+    Dim timeStep As Integer
+    For i = 0 To UBound(data.StepData)
+        If data.StepData(i).TimeInSeconds = time Then
+            GetTemperatureFromTime = data.StepData(i).MaxTemp
+            Exit Function
+        End If
+End Function
+
+' Beltemp steps are subset of Fahts steps
+Function IsBeltempStep(FahtsStep As Long, BeltempStep As Long) As Boolean
+    IsBeltempStep = (FahtsStep Mod BeltempStep = 0)
+End Function
+
+Function GetBeltempData(FahtsData As SimulationData) As Collection
+    ' Main function to get beltemp temperatures from Fahst output data
+    ' Beltemp are presented in different steps than fahts so it is necessary to convert
+    Dim BeltempStep As Long
+    Dim BeltempStepData As New Scripting.Dictionary
+    Dim BeltempData As New Collection
+    Dim lastFahtsStep As Long
+    Dim i As Long
+    
+
+    ' Calculate the beltmp step to know ich values from fahts are considered
+    BeltempStep = CalculateBeltempStep(FahtsData.NumberOfTimeSteps, FahtsData.TotalSimTime, FahtsData.BeltempTimeInterval)
+    
+    lastFahtsStep = UBound(FahtsData.StepData) + 1
+  
+    For i = 1 To lastFahtsStep
+    ' Fahts Initializes in step one
+        If IsBeltempStep(i, BeltempStep) Then
+            Set BeltempStepData = New Scripting.Dictionary
+            BeltempStepData("Time") = Round((FahtsData.StepData(i - 1).TimeInSeconds), 1)
+            BeltempStepData("Temperature") = FahtsData.StepData(i - 1).MaxTemp
+            BeltempData.Add BeltempStepData
+        End If
+    Next i
+
+    If Not IsBeltempStep(lastFahtsStep, BeltempStep) Then
+        Set BeltempStepData = New Scripting.Dictionary
+        BeltempStepData("Time") = Round((FahtsData.StepData(lastFahtsStep - 1).TimeInSeconds), 1)
+        BeltempStepData("Temperature") = FahtsData.StepData(lastFahtsStep - 1).MaxTemp
+        BeltempData.Add BeltempStepData
+    End If
+
+    Set GetBeltempData = BeltempData
+
+
+Function FindPeaksIdx(values As Collection) As Collection
+    Dim peaks As New Collection
+    Dim i As Long
+
+    ' Check for peaks and decrease shape after plateau in values excluding the boundaries
+    For i = 2 To values.Count - 1
+        If values(i) >= values(i - 1) And values(i) > values(i + 1) Then
+            peaks.Add i
+        End If
+    Next i
+
+    Set FindPeaksIdx = peaks
+End Function
 
