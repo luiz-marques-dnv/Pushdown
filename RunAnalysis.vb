@@ -66,71 +66,78 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     Dim caseFolderPath As String
     Dim FahtsOutPath As String
     Dim FahtsData As SimulationData
-    Dim BeltempData As Collection
+    Dim BeltempData As Scripting.Dictionary
+    Dim BeltempTimes As Collection
+    Dim BeltempTemperatures As Collection
+    Dim HighestElementStrain As Long
+    Dim strainCriteria As Double
+    Dim pfpEligibleElement As ElementType
     Dim filteredloadCaseData As Collection
     Dim remainingloadCaseData As Collection
 
-
-    
-    If iter = 1 Then
-        'Defining commands paths to be run
-        shellCommandUsfos = """" & CURRENT_FOLDER & "\" & "script_rodar_USFOS.bat"
-        shellCommandStrain = """" & CURRENT_FOLDER & "\" & "script_rodar_STRAIN.bat" & """"
-        shellCommandStrainNeg = """" & CURRENT_FOLDER & "\" & "script_rodar_STRAIN_neg.bat" & """"
-        
-        ' Running Usfos
-        UsfosShell = ExecuteShellCommand(shellCommandUsfos)
-
-        ' Running strain and Straing neg to get values outside criteria
-        StrainShell = ExecuteShellCommand(shellCommandStrain)
-        StrainNegShell = ExecuteShellCommand(shellCommandStrainNeg)
-        
-        For row = 2 To ultimaLinha
-             ' Process strain criteria
-            pfpEligibleElement = ProcessStrainCriteria(row)
-    
-            ' TODO: hange thi condition handling
-            If pfpEligibleElement.Number <> 0 Then
-                ' Update Completion Status
-                shtScriptUsfos.Cells(row, "S") = "on going"
+    For row = 2 To ultimaLinha
+        If Not AuxMacros.IsCompleted(row) Then
+            ' Initialize values from the sheet
+            'TODO: Change this to a class
+            InitializeCaseValues row, scenarioName, caseFolderPath, FahtsOutPath
             
+            ' Get strain criteria from sheet
+            strainCriteria = shtScriptUsfos.Cells(row, "I")
     
-            ElseIf pfpEligibleElement.Number = 0 Then
-                shtScriptUsfos.Cells(row, "S") = "completed"
-            End If
-        Next row
+            If iter = 1 Then
+                'Defining commands paths to be run
+                shellCommandUsfos = """" & CURRENT_FOLDER & "\" & "script_rodar_USFOS.bat"
+                shellCommandStrain = """" & CURRENT_FOLDER & "\" & "script_rodar_STRAIN.bat" & """"
+                shellCommandStrainNeg = """" & CURRENT_FOLDER & "\" & "script_rodar_STRAIN_neg.bat" & """"
+                
+                ' Running Usfos
+                UsfosShell = ExecuteShellCommand(shellCommandUsfos)
 
-        ' Create a folder and Copy first Run files
-        CopyFirstRunFiles ultimaLinha
-    
+                ' Running strain and Straing neg to get values outside criteria
+                StrainShell = ExecuteShellCommand(shellCommandStrain)
+                StrainNegShell = ExecuteShellCommand(shellCommandStrainNeg)
+                
+                
+                ' Process strain criteria
+                pfpEligibleElement = ProcessStrainCriteria(scenarioName, caseFolderPath, strainCriteria)
         
-    ElseIf iter > 1 Then
-        For row = 2 To ultimaLinha
-            If Not AuxMacros.IsCompleted(row) Then
-                ' Initialize values from the sheet
-                'TODO: Change this to a class
-                InitializeCaseValues row, scenarioName, caseFolderPath, FahtsOutPath
-    
+                ' TODO: hange thi condition handling
+                If pfpEligibleElement.Number <> 0 Then
+                    ' Update Completion Status
+                    shtScriptUsfos.Cells(row, "S") = "on going"
+                
+        
+                ElseIf pfpEligibleElement.Number = 0 Then
+                    shtScriptUsfos.Cells(row, "S") = "completed"
+                End If
+                
+
+                ' Create a folder and Copy first Run files
+                CopyFirstRunFiles ultimaLinha
+            
+                
+            ElseIf iter > 1 Then
                 ' Retrievieng some information from fahts output
                 FahtsData = ExtractDataFromFahtsOut(FahtsOutPath)
-
-                ' Extract the load case data from the Beltemp file
-                Set loadCaseData = ExtractLoadCaseData(BeltempFilePath)
                 
+                ' Storing Beltemp Times and Temperatures
                 Set BeltempData = GetBeltempData(FahtsData)
+                Set BeltempTimes = BeltempData("Times")
+                Set BeltempTemperatures = BeltempData("Temperatures")
 
                 ' Get a subset from loadCaseData so less load cases are processed
-                Set filteredloadCaseData = GetFilteredLoadCaseData(BeltempData)
+                Set FilteredTimes = GetFilteredTimes(BeltempTimes, BeltempTemperatures)
 
-                HighestElementStrain = ExecuteCriteriasCheck row, filteredloadCaseData, scenarioName, caseFolderPath, iter
 
-                ' Check if the filtered load case data was enough to find a PFP element 
+                HighestElementStrain = ExecuteCriteriasCheck(FilteredTimes, scenarioName, caseFolderPath, iter, strainCriteria)
+
+                ' Check if the filtered load case data was enough to find a PFP element
                 If HighestElementStrain = 0 Then
 
                     ' Get the remaining load case data
-                    Set remainingloadCaseData = GetRemainingLoadCaseData(loadCaseData, filteredloadCaseData)
+                    Set RemainingFilteredTime = GetRemainingFilteredTime(BeltempTimes, FilteredTimes)
 
-                    ExecuteCriteriasCheck row, remainingloadCaseData, HighestStrain, HighestElementStrain, scenarioName, caseFolderPath, iter, loadcase, LoadCaseTime, pfpEligibleElement, loadCaseTimeDetails, loadCaseDataFiltered
+                    HighestElementStrain = ExecuteCriteriasCheckAll(RemainingFilteredTime, scenarioName, caseFolderPath, iter, strainCriteria)
                 End If
 
                 If HighestElementStrain <> 0 Then
@@ -153,9 +160,8 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                 End If
 
             End If
-        Next row
-    End If
-
+        End If
+    Next row
     ' Verify and update criteria
     VerifyAndUpdateCriteria iter
 
@@ -165,19 +171,89 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     End If
 End Sub
 
-Private Function ProcessStrainCriteria(ByVal row As Long) As ElementType
+Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria) As Long
+    Dim time As Variant
+    Dim loadcase As Long
+    Dim pfpEligibleElement As ElementType
+    Dim HighestStrain As Double
+    Dim HighestElementStrain As Long
+    
+    For Each time In BeltempTimes
+        ' Update Head USFOS file
+        UpdateHeadUsfos time, scenarioName, caseFolderPath
+
+        ' Running Usfos
+        ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
+
+        ' Running strain and Straing neg to get values outside criteria
+        ExecuteProgram Program.Strain, caseFolderPath, scenarioName
+        'ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
+        
+        ' Process strain criteria
+        pfpEligibleElement = ProcessStrainCriteria(scenarioName, caseFolderPath, strainCriteria)
+        
+        ' Read elements above buckling criteria
+        ProcessBucklingCriteria iter
+
+        If pfpEligibleElement.Strain <> 0 Then
+            HighestStrain = pfpEligibleElement.Strain
+            HighestElementStrain = pfpEligibleElement.Number
+
+            'Copying starin files just to check    TODO: Delete after checking
+            CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
+
+            ExecuteCriteriasCheck = pfpEligibleElement.Number
+
+            Exit Function
+        End If
+    Next time
+
+    ExecuteCriteriasCheck = pfpEligibleElement.Number
+
+End Function
+
+Private Function ExecuteCriteriasCheckAll(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria) As Long
+    For Each time In BeltempTimes
+        ' Update Head USFOS file
+        UpdateHeadUsfos time, scenarioName, caseFolderPath
+
+        ' Running Usfos
+        ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
+
+        ' Running strain and Straing neg to get values outside criteria
+        ExecuteProgram Program.Strain, caseFolderPath, scenarioName
+        'ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
+        
+        ' Process strain criteria
+        pfpEligibleElement = ProcessStrainCriteria(scenarioName, caseFolderPath, strainCriteria)
+        
+        ' Read elements above buckling criteria
+        ProcessBucklingCriteria iter
+
+        If pfpEligibleElement.Strain > HighestStrain Then
+            HighestStrain = pfpEligibleElement.Strain
+            HighestElementStrain = pfpEligibleElement.Number
+        End If
+        
+        'Copying starin files just to check    TODO: Delete after checking
+        CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
+
+    Next time
+
+    ExecuteCriteriasCheckAll = HighestElementStrain
+
+End Function
+
+Private Function ProcessStrainCriteria(ByVal scenarioName As String, ByVal caseFolderPath As String, ByVal strainCriteria As Double) As ElementType
     Dim FileStrain As String
     Dim FileStrainNeg As String
-    Dim strainCriteria As Double
     Dim ElementsPositiveCriteria As Scripting.Dictionary
     Dim ElementsNegativeCriteria As Scripting.Dictionary
     Dim pfpEligibleElement As ElementType
     'Dim ElementsNegativeCriteria As Collection
-    
-    strainCriteria = shtScriptUsfos.Cells(row, "I")
 
     ' Common setup for strain and strain_neg
-    StrainsFilePaths row, FileStrain, FileStrainNeg
+    StrainsFilePaths scenarioName, caseFolderPath, FileStrain, FileStrainNeg
 
     ' Process positive strain criteria
     Set ElementsPositiveCriteria = GetElementsAboveCriteriaStrain(FileStrain, strainCriteria)
@@ -195,18 +271,15 @@ Private Function ProcessStrainCriteria(ByVal row As Long) As ElementType
     ProcessStrainCriteria = pfpEligibleElement
 End Function
 
-Private Sub StrainsFilePaths(ByVal row As Long, ByRef FileStrain As String, ByRef FileStrainNeg As String)
-    Dim scenarioName As String
-    Dim caseFolderPath As String
+Private Sub StrainsFilePaths(ByVal scenarioName As String, ByVal caseFolderPath As String, ByRef FileStrain As String, ByRef FileStrainNeg As String)
     Dim FilenameStrain As String
     Dim FilenameStrain_neg As String
 
-    scenarioName = shtScriptUsfos.Cells(row, "B")
     FilenameStrain = scenarioName & "_strain_output"
     FilenameStrain_neg = scenarioName & "_strain_neg_output"
-    caseFolderPath = CURRENT_FOLDER & "\" & shtScriptUsfos.Cells(row, "A") & "_" & scenarioName
     FileStrain = caseFolderPath & "\" & FilenameStrain
     FileStrainNeg = caseFolderPath & "\" & FilenameStrain_neg
+
 End Sub
 Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strainCriteria) As Scripting.Dictionary
     ' Process the strain file (either positive or negative) and returns a dinamic array of elements with number and strain that have a strain above the criteria
@@ -339,11 +412,10 @@ Private Sub ProcessBucklingCriteria(ByVal iter As Integer)
 End Sub
 
 
-Private Sub UpdateHeadUsfos(ByVal row As Long, ByVal LoadCaseTime As String)
+Private Sub UpdateHeadUsfos(ByVal LoadCaseTime As Long, ByVal scenarioName As String, ByVal caseFolderPath As String)
     ' Updates the Head USFOS file for each row in the specified range.
     ' TODO: CHange the fucntion to receive the files path and not the row
-    Dim scenarioName As String
-    Dim caseFolderPath As String
+
     Dim HeadFilename As String
     Dim HeadDefaultFile As String
     Dim HeadCaseFile As String
@@ -351,9 +423,6 @@ Private Sub UpdateHeadUsfos(ByVal row As Long, ByVal LoadCaseTime As String)
     Dim currentLoadCaseTime As Double
     Dim FSObject As Object
 
-    ' Initialize values from the sheet
-    scenarioName = shtScriptUsfos.Cells(row, "B")
-    caseFolderPath = CURRENT_FOLDER & "\" & shtScriptUsfos.Cells(row, "A") & "_" & scenarioName
 
     ' Define the paths to Head and Beltemp files
     HeadFilename = "usfos_head_" & scenarioName
@@ -438,7 +507,7 @@ ErrorHandler:
 End Function
 
 Private Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory As String, ByVal scenarioName As String)
-    Dim executable, outputFileName, inputFileName, usfosBinFolder,fullCommand As String
+    Dim executable, outputFileName, inputFileName, usfosBinFolder, fullCommand As String
     Dim ShellResult As Variant
     Dim InitShellTimer, elapsedShellTime As Double
     Dim userResponse As Variant
@@ -524,54 +593,6 @@ Private Function ExecuteShellCommandHidden(ByVal command As String, workingDirec
 ErrorHandler:
     MsgBox "An error occurred: " & Err.Description
     ExecuteShellCommandHidden = Nothing
-End Function
-
-
-Private Function ExtractLoadCaseData(ByVal BeltempFilePath As String) As Collection
-    ' Read and process the Beltemp file to get all load cases steps and times.
-    Dim currentLine As String
-    Dim loadCaseLine As String
-    Dim splitLoadCaseDetails() As String
-    Dim loadCaseData As Collection
-    Dim loadCaseTimeDetails(1) As String
-    
-    Set loadCaseData = New Collection
-    
-    BeltempFileHandle = FreeFile
-    Open BeltempFilePath For Input As #BeltempFileHandle
-    Do Until EOF(BeltempFileHandle)
-        Line Input #BeltempFileHandle, currentLine
-        If InStr(currentLine, "LCASETIM") Then
-            loadCaseLine = WorksheetFunction.Trim(currentLine)          ' remove extra spaces
-            splitLoadCaseDetails = Split(loadCaseLine, " ")             ' split into array
-            
-            ' Creating an array of size 2
-            loadCaseTimeDetails(0) = splitLoadCaseDetails(1)            ' get the load case info
-            loadCaseTimeDetails(1) = splitLoadCaseDetails(2)            ' get the time info
-
-            ' Adding the pair to the collection
-            loadCaseData.Add loadCaseTimeDetails
-        End If
-    Loop
-    Close #belTempFilePathHandle
-    
-    Set ExtractLoadCaseData = loadCaseData
-End Function
-
-
-Private Function GetNextLoadCaseTime(ByVal loadCaseData As Collection, ByVal lastLoadCaseTime As Double) As Double
-    ' Get the next load case time based on the last load case time
-    Dim loadCaseTimeDetails As Variant
-    
-    loadCaseTimeFound = False
-    
-    For Each loadCaseTimeDetails In loadCaseData
-        If CDbl(loadCaseTimeDetails(1)) > CDbl(lastLoadCaseTime) Then
-            GetNextLoadCaseTime = loadCaseTimeDetails(1)
-            Exit Function
-        End If
-    Next
-
 End Function
 
 Private Sub ModifyHeadFile(ByVal HeadFile As String, ByVal LoadCaseTime As Double)
@@ -880,40 +901,44 @@ Function IsBeltempStep(FahtsStep As Long, BeltempStep As Long) As Boolean
     IsBeltempStep = (FahtsStep Mod BeltempStep = 0)
 End Function
 
-Function GetBeltempData(FahtsData As SimulationData) As Collection
+Function GetBeltempData(FahtsData As SimulationData) As Scripting.Dictionary
     ' Main function to get beltemp temperatures from Fahst output data
     ' Beltemp are presented in different steps than fahts so it is necessary to convert
     Dim BeltempStep As Long
-    Dim BeltempStepData As New Scripting.Dictionary
-    Dim BeltempData As New Collection
     Dim lastFahtsStep As Long
     Dim i As Long
-    
+    Dim BeltempData As New Scripting.Dictionary
+    Dim BeltempTemperatures As New Collection
+    Dim BeltempTimes As New Collection
 
     ' Calculate the beltmp step to know ich values from fahts are considered
     BeltempStep = CalculateBeltempStep(FahtsData.NumberOfTimeSteps, FahtsData.TotalSimTime, FahtsData.BeltempTimeInterval)
     
     lastFahtsStep = UBound(FahtsData.StepData) + 1
-  
+ 
     For i = 1 To lastFahtsStep
     ' Fahts Initializes in step one
         If IsBeltempStep(i, BeltempStep) Then
-            Set BeltempStepData = New Scripting.Dictionary
-            BeltempStepData("Time") = Round((FahtsData.StepData(i - 1).TimeInSeconds), 1)
-            BeltempStepData("Temperature") = FahtsData.StepData(i - 1).MaxTemp
-            BeltempData.Add BeltempStepData
+            ' Add data to collections
+            BeltempTimes.Add Round((FahtsData.StepData(i - 1).TimeInSeconds), 1)
+            BeltempTemperatures.Add FahtsData.StepData(i - 1).MaxTemp
+
         End If
     Next i
 
     If Not IsBeltempStep(lastFahtsStep, BeltempStep) Then
-        Set BeltempStepData = New Scripting.Dictionary
-        BeltempStepData("Time") = Round((FahtsData.StepData(lastFahtsStep - 1).TimeInSeconds), 1)
-        BeltempStepData("Temperature") = FahtsData.StepData(lastFahtsStep - 1).MaxTemp
-        BeltempData.Add BeltempStepData
+        ' Add data to collections
+        BeltempTimes.Add Round((FahtsData.StepData(lastFahtsStep - 1).TimeInSeconds), 1)
+        BeltempTemperatures.Add FahtsData.StepData(lastFahtsStep - 1).MaxTemp
+       
     End If
 
-    Set GetBeltempData = BeltempData
+    ' Add data to dictionary
+    BeltempData.Add "Times", BeltempTimes
+    BeltempData.Add "Temperatures", BeltempTemperatures
 
+    Set GetBeltempData = BeltempData
+End Function
 
 Function FindPeaksIdx(values As Collection) As Collection
     Dim peaks As New Collection
@@ -929,3 +954,54 @@ Function FindPeaksIdx(values As Collection) As Collection
     Set FindPeaksIdx = peaks
 End Function
 
+Function FindMaxTempIdx(Temperatures As Collection) As Long
+    Dim maxTempIdx As Long
+    Dim i As Long
+
+    maxTempIdx = 1
+    For i = 2 To Temperatures.Count
+        If Temperatures(i) > Temperatures(maxTempIdx) Then
+            maxTempIdx = i
+        End If
+    Next i
+
+    FindMaxTempIdx = maxTempIdx
+End Function
+
+
+Private Function GetFilteredTimes(ByVal BeltempTimes As Collection, ByVal BeltempTemperatures As Collection) As Collection
+    ' Get the next load case time based on the last load case time
+    Dim loadCaseTimeDetails As Variant
+    Dim FilteredTimes As New Collection
+    Dim maxTempIdx As Long
+    Dim PeaksIdx As Collection
+    Dim idx As Variant
+
+    maxTempIdx = FindMaxTempIdx(BeltempTemperatures)
+
+    FilteredTimes.Add BeltempTimes(maxTempIdx)
+    
+    Set PeaksIdx = FindPeaksIdx(BeltempTemperatures)
+    For Each idx In PeaksIdx
+        If idx <> maxTempIdx Then
+            FilteredTimes.Add BeltempTimes(idx)
+        End If
+    Next
+
+    Set GetFilteredTimes = FilteredTimes
+End Function
+
+Private Function GetRemainingFilteredTime(ByVal BeltempTimes As Collection, ByVal FilteredTimes As Collection) As Collection
+    ' Get the next load case time based on the last load case time
+    Dim loadCaseTimeDetails As Variant
+    Dim RemainingFilteredTimes As New Collection
+    Dim idx As Variant
+
+    For Each idx In BeltempTimes
+        If Not IsInCollection(FilteredTimes, idx) Then
+            RemainingFilteredTimes.Add idx
+        End If
+    Next
+
+    Set GetRemainingFilteredTime = RemainingFilteredTimes
+End Function
