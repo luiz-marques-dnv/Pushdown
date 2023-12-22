@@ -114,7 +114,9 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
 
                 ' Create a folder and Copy first Run files
                 CopyFirstRunFiles ultimaLinha
-            
+                
+                ' Copy Fahts output to further analysis. TODO: Delete later
+                CopyFahtsOutFiles scenarioName, caseFolderPath, iter + 1
                 
             ElseIf iter > 1 Then
                 ' Retrievieng some information from fahts output
@@ -128,16 +130,16 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                 ' Get a subset from loadCaseData so less load cases are processed
                 Set FilteredTimes = GetFilteredTimes(BeltempTimes, BeltempTemperatures)
 
-
-                HighestElementStrain = ExecuteCriteriasCheck(FilteredTimes, scenarioName, caseFolderPath, iter, strainCriteria)
+                ' TODO: Remove BeltempTimes as parameter after analisys check
+                HighestElementStrain = ExecuteCriteriasCheck(FilteredTimes, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
 
                 ' Check if the filtered load case data was enough to find a PFP element
                 If HighestElementStrain = 0 Then
 
                     ' Get the remaining load case data
                     Set RemainingFilteredTime = GetRemainingFilteredTime(BeltempTimes, FilteredTimes)
-
-                    HighestElementStrain = ExecuteCriteriasCheckAll(RemainingFilteredTime, scenarioName, caseFolderPath, iter, strainCriteria)
+                    ' TODO: Remove BeltempTimes after analisys check
+                    HighestElementStrain = ExecuteCriteriasCheckAll(RemainingFilteredTime, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
                 End If
 
                 If HighestElementStrain <> 0 Then
@@ -150,7 +152,8 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     ' Running Fahts
                     ExecuteProgram Program.FAHTS, caseFolderPath, scenarioName
                     
-                    CopyFahtsOutFiles scenarioName, caseFolderPath, iter
+                    ' Copy Fahts output to further analysis. TODO: Delete later
+                    CopyFahtsOutFiles scenarioName, caseFolderPath, iter + 1
     
                     ' Update Completion Status
                     shtScriptUsfos.Cells(row, "S") = "on going"
@@ -171,9 +174,9 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     End If
 End Sub
 
-Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria) As Long
+Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, AllBeltempTimes) As Long
     Dim time As Variant
-    Dim loadcase As Long
+    Dim loadCase As Long
     Dim pfpEligibleElement As ElementType
     Dim HighestStrain As Double
     Dim HighestElementStrain As Long
@@ -194,25 +197,31 @@ Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPat
         
         ' Read elements above buckling criteria
         ProcessBucklingCriteria iter
-
+        
+        Debug.Print time, pfpEligibleElement.Strain
+        
+        'Copying starin files just to check    TODO: Delete after checking
+        CopyStrainFiles scenarioName, caseFolderPath, iter, time, AllBeltempTimes
+        
         If pfpEligibleElement.Strain <> 0 Then
-            HighestStrain = pfpEligibleElement.Strain
-            HighestElementStrain = pfpEligibleElement.Number
-
-            'Copying starin files just to check    TODO: Delete after checking
-            CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
 
             ExecuteCriteriasCheck = pfpEligibleElement.Number
 
             Exit Function
         End If
+    
     Next time
-
     ExecuteCriteriasCheck = pfpEligibleElement.Number
 
 End Function
 
-Private Function ExecuteCriteriasCheckAll(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria) As Long
+Private Function ExecuteCriteriasCheckAll(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, AllBeltempTimes) As Long
+    Dim time As Variant
+    Dim loadCase As Long
+    Dim pfpEligibleElement As ElementType
+    Dim HighestStrain As Double
+    Dim HighestElementStrain As Long
+    
     For Each time In BeltempTimes
         ' Update Head USFOS file
         UpdateHeadUsfos time, scenarioName, caseFolderPath
@@ -236,7 +245,7 @@ Private Function ExecuteCriteriasCheckAll(BeltempTimes, scenarioName, caseFolder
         End If
         
         'Copying starin files just to check    TODO: Delete after checking
-        CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
+        CopyStrainFiles scenarioName, caseFolderPath, iter, time, AllBeltempTimes
 
     Next time
 
@@ -412,7 +421,7 @@ Private Sub ProcessBucklingCriteria(ByVal iter As Integer)
 End Sub
 
 
-Private Sub UpdateHeadUsfos(ByVal LoadCaseTime As Long, ByVal scenarioName As String, ByVal caseFolderPath As String)
+Private Sub UpdateHeadUsfos(ByVal BeltempTime As Double, ByVal scenarioName As String, ByVal caseFolderPath As String)
     ' Updates the Head USFOS file for each row in the specified range.
     ' TODO: CHange the fucntion to receive the files path and not the row
 
@@ -434,7 +443,7 @@ Private Sub UpdateHeadUsfos(ByVal LoadCaseTime As Long, ByVal scenarioName As St
     FSObject.CopyFile HeadDefaultFile, HeadCaseFile, True
     
     ' Update the head file
-    ModifyHeadFile HeadFile:=HeadCaseFile, LoadCaseTime:=LoadCaseTime
+    ModifyHeadFile HeadFile:=HeadCaseFile, BeltempTime:=BeltempTime
 End Sub
 
 Private Sub CopyFirstRunFiles(ByVal ultimaLinha As Long)
@@ -483,9 +492,9 @@ Private Sub CopyCaseFile(ByVal sourcePath As String, ByVal destinationPath As St
     DestinationFile = destinationPath & "\" & scenarioName & fileName
     
     On Error Resume Next
-    fso.CopyFile SourceFile, DestinationFile  ' Copy source to target and overwrite if the file exists.
+    fso.CopyFile Source:=SourceFile, Destination:=DestinationFile, overwrite:=True    ' Copy source to target and overwrite if the file exists.
     If Err.Number <> 0 Then
-        Debug.Print "Source:" & SourceFile
+        Debug.Print "An error occurred while copying the file " & SourceFile & ". Error: " & Err.Description
         'MsgBox "An error occurred while copying the file " & fileName & ". Error: " & Err.Description, vbCritical
     End If
     On Error GoTo 0
@@ -595,7 +604,7 @@ ErrorHandler:
     ExecuteShellCommandHidden = Nothing
 End Function
 
-Private Sub ModifyHeadFile(ByVal HeadFile As String, ByVal LoadCaseTime As Double)
+Private Sub ModifyHeadFile(ByVal HeadFile As String, ByVal BeltempTime As Double)
     ' Modify the head file based on the case information
     Dim HeadFileHandle As Long
     
@@ -605,7 +614,7 @@ Private Sub ModifyHeadFile(ByVal HeadFile As String, ByVal LoadCaseTime As Doubl
     Close #HeadFileHandle
     
     ' Replace the specific string
-    HeadFileContent = Replace(HeadFileContent, "'###PUSHDOWN COMMAND###", "Pushdown AtTime " & LoadCaseTime)
+    HeadFileContent = Replace(HeadFileContent, "'###PUSHDOWN COMMAND###", "Pushdown AtTime " & BeltempTime)
 
     ' Open the file for writing
     HeadFileHandle = FreeFile
@@ -749,14 +758,24 @@ Private Sub InitializeCaseValues(ByVal row As Long, ByRef scenarioName, ByRef ca
  
 End Sub
 
-Sub CopyStrainFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal iter As Long, loadcase As Long)
-        ' Create a directory for strain files if it doesn't exist
+Sub CopyStrainFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal iter As Long, ByVal time As Double, ByVal BeltempTimes As Collection)
+    ' Create a directory for strain files if it doesn't exist and copy strain for specific time and iter. This is just to store information to further analysis
     Dim StrainDirectory As String
     Dim SourceFile As String
     Dim DestinationFile As String
     Dim FSObject As Object
     Dim StrainFiles As String
+    Dim loadCase As Long
     
+    
+    For i = 1 To BeltempTimes.Count
+        If time = BeltempTimes(i) Then
+            loadCase = i + 3
+            Debug.Print (loadCase)
+            Exit For
+        End If
+    Next i
+
     StrainFoldePath = caseFolderPath & "\StrainFiles"
     If Dir(StrainFoldePath, vbDirectory) = "" Then  ' Check if the directory already exists
         On Error Resume Next
@@ -766,7 +785,7 @@ Sub CopyStrainFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal it
 
     ' Copy the strain files to the directory
     SourceFilePath = caseFolderPath & "\" & scenarioName & "_strain_output"
-    DestinationFilePath = StrainFoldePath & "\" & scenarioName & "_strain_output_" & "iter_" & iter & "_LC_" & loadcase
+    DestinationFilePath = StrainFoldePath & "\" & scenarioName & "_strain_output_" & "iter_" & iter & "_LC_" & loadCase
 
     ' Copy strain files to the directory
     Set FSObject = CreateObject("Scripting.FileSystemObject")
@@ -774,7 +793,7 @@ Sub CopyStrainFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal it
 End Sub
 
 Sub CopyFahtsOutFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal iter As Long)
-        ' Create a directory for strain files if it doesn't exist
+    ' Create a directory for strain files if it doesn't exist
     Dim StrainDirectory As String
     Dim SourceFile As String
     Dim DestinationFile As String
@@ -1004,4 +1023,15 @@ Private Function GetRemainingFilteredTime(ByVal BeltempTimes As Collection, ByVa
     Next
 
     Set GetRemainingFilteredTime = RemainingFilteredTimes
+End Function
+
+Private Function IsInCollection(col As Collection, item As Variant) As Boolean
+    Dim i As Variant
+    IsInCollection = False
+    For Each i In col
+        If i = item Then
+            IsInCollection = True
+            Exit Function
+        End If
+    Next i
 End Function
