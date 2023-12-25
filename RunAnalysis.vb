@@ -28,6 +28,10 @@ Sub Run_analysis()
     'set current directory to public variable CURRENT_FOLDER
     ' TODO: Set default variables
     AuxMacros.setCurrentFolder
+
+    ' Check if petrobras analysis is on
+    ' TODO: Place this on a sheet or choose a better option
+    Public const PETROBRASANALYSIS = True
     
     ultimaLinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
     iter = InitializeIteration()
@@ -37,7 +41,6 @@ Sub Run_analysis()
         iter = iter + 1
         ' Update iteration number in the worksheet
         shtScriptUsfos.Cells(17, 23) = iter
-        
         
         
         ProcessIteration iter, ultimaLinha
@@ -69,7 +72,7 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     Dim BeltempData As Scripting.Dictionary
     Dim BeltempTimes As Collection
     Dim BeltempTemperatures As Collection
-    Dim HighestElementStrain As Long
+    Dim HighestElement As ElementType
     Dim strainCriteria As Double
     Dim pfpEligibleElement As ElementType
     Dim filteredloadCaseData As Collection
@@ -131,20 +134,17 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                 Set FilteredTimes = GetFilteredTimes(BeltempTimes, BeltempTemperatures)
 
                 ' TODO: Remove BeltempTimes as parameter after analisys check
-                HighestElementStrain = ExecuteCriteriasCheck(FilteredTimes, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
+                HighestElement = ExecuteCriteriasCheck(FilteredTimes, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
 
                 ' Check if the filtered load case data was enough to find a PFP element
-                If HighestElementStrain = 0 Then
+                If HighestElement.Strain < 2 and PETROBRASANALYSIS Then
 
-                    ' Get the remaining load case data
-                    Set RemainingFilteredTime = GetRemainingFilteredTime(BeltempTimes, FilteredTimes)
-                    ' TODO: Remove BeltempTimes after analisys check
-                    HighestElementStrain = ExecuteCriteriasCheckAll(RemainingFilteredTime, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
+                    HighestElement = ExecuteCriteriasCheckPetrobras(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
                 End If
 
-                If HighestElementStrain <> 0 Then
+                If HighestElement.Strain <> 0 Then
                     ' Write PFP element to the script file
-                    writePFPElement row, HighestElementStrain
+                    writePFPElement row, HighestElement.Number
     
                     ' Update Fahts for on going cases
                     UpdateHeadFahts row
@@ -174,16 +174,15 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     End If
 End Sub
 
-Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, AllBeltempTimes) As Long
-    Dim time As Variant
+Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, AllBeltempTimes) As ElementType
+    Dim LastTime As Double
     Dim loadCase As Long
     Dim pfpEligibleElement As ElementType
     Dim HighestStrain As Double
     Dim HighestElementStrain As Long
     
-    For Each time In BeltempTimes
         ' Update Head USFOS file
-        UpdateHeadUsfos time, scenarioName, caseFolderPath
+        UpdateHeadUsfos "UpToTime", LastTime, scenarioName, caseFolderPath
 
         ' Running Usfos
         ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
@@ -205,17 +204,17 @@ Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPat
         
         If pfpEligibleElement.Strain <> 0 Then
 
-            ExecuteCriteriasCheck = pfpEligibleElement.Number
+            ExecuteCriteriasCheck = pfpEligibleElement
 
             Exit Function
         End If
     
-    Next time
-    ExecuteCriteriasCheck = pfpEligibleElement.Number
+
+    ExecuteCriteriasCheck = pfpEligibleElement
 
 End Function
 
-Private Function ExecuteCriteriasCheckAll(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, AllBeltempTimes) As Long
+Private Function ExecuteCriteriasCheckPetrobras(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, AllBeltempTimes) As Long
     Dim time As Variant
     Dim loadCase As Long
     Dim pfpEligibleElement As ElementType
@@ -224,7 +223,7 @@ Private Function ExecuteCriteriasCheckAll(BeltempTimes, scenarioName, caseFolder
     
     For Each time In BeltempTimes
         ' Update Head USFOS file
-        UpdateHeadUsfos time, scenarioName, caseFolderPath
+        UpdateHeadUsfos "AtTime", scenarioName, caseFolderPath
 
         ' Running Usfos
         ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
@@ -421,7 +420,7 @@ Private Sub ProcessBucklingCriteria(ByVal iter As Integer)
 End Sub
 
 
-Private Sub UpdateHeadUsfos(ByVal BeltempTime As Double, ByVal scenarioName As String, ByVal caseFolderPath As String)
+Private Sub UpdateHeadUsfos(ByVal PushDownCommand as String, ByVal BeltempTime As Double, ByVal scenarioName As String, ByVal caseFolderPath As String)
     ' Updates the Head USFOS file for each row in the specified range.
     ' TODO: CHange the fucntion to receive the files path and not the row
 
@@ -443,7 +442,7 @@ Private Sub UpdateHeadUsfos(ByVal BeltempTime As Double, ByVal scenarioName As S
     FSObject.CopyFile HeadDefaultFile, HeadCaseFile, True
     
     ' Update the head file
-    ModifyHeadFile HeadFile:=HeadCaseFile, BeltempTime:=BeltempTime
+    ModifyHeadFile PushDownCommand HeadCaseFile, BeltempTime
 End Sub
 
 Private Sub CopyFirstRunFiles(ByVal ultimaLinha As Long)
@@ -604,7 +603,7 @@ ErrorHandler:
     ExecuteShellCommandHidden = Nothing
 End Function
 
-Private Sub ModifyHeadFile(ByVal HeadFile As String, ByVal BeltempTime As Double)
+Private Sub ModifyHeadFile(ByVal PushDownCommand as String, ByVal HeadFile As String, ByVal BeltempTime As Double)
     ' Modify the head file based on the case information
     Dim HeadFileHandle As Long
     
@@ -614,7 +613,7 @@ Private Sub ModifyHeadFile(ByVal HeadFile As String, ByVal BeltempTime As Double
     Close #HeadFileHandle
     
     ' Replace the specific string
-    HeadFileContent = Replace(HeadFileContent, "'###PUSHDOWN COMMAND###", "Pushdown AtTime " & BeltempTime)
+    HeadFileContent = Replace(HeadFileContent, "'###PUSHDOWN COMMAND###", "Pushdown " PushDownCommand & " " & BeltempTime)
 
     ' Open the file for writing
     HeadFileHandle = FreeFile
