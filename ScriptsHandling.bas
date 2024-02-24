@@ -18,7 +18,7 @@ Sub CreateScriptFiles(ByVal commandName As String, ScriptName As String)
 
 End Sub
 
-Sub InitializeCaseValues(ByVal row As Long, ByRef scenarioName As String, ByRef CaseFolder As String, ByRef ModelFileName As String, ByRef BeltempFilename As String, ByRef BeltempFilePath As String, ByRef fire As String, ByRef HeadFilename As String, ByRef InputFile As String, ByRef HeadDefaultFile As String, ByRef HeadCaseFile As String)
+Sub InitializeCaseValues(ByVal row As Long, ByRef scenarioName As String, ByRef CaseFolder As String, ByRef ModelFileName As String, ByRef BeltempFilename As String, ByRef fire As String, ByRef HeadFilename As String, ByRef InputFile As String)
     ' Initialize and fetch values from the worksheet
     scenarioName = shtScriptUsfos.Cells(row, "B")
     ModelFileName = Replace(expression:=shtScriptFaths.Cells(row, "P"), Find:=".fem", Replace:="")
@@ -26,11 +26,8 @@ Sub InitializeCaseValues(ByVal row As Long, ByRef scenarioName As String, ByRef 
     
     CaseFolder = CURRENT_FOLDER & "\" & shtScriptFaths.Cells(row, "A") & "_" & scenarioName
     BeltempFilename = scenarioName & "_output_beltemp"
-    BeltempFilePath = CaseFolder & "\" & BeltempFilename & ".fem"
     HeadFilename = "usfos_head_" & scenarioName
     InputFile = CaseFolder & "\usfos_input.inp"
-    HeadDefaultFile = CURRENT_FOLDER & HEAD_DEFAULT_FILE
-    HeadCaseFile = CaseFolder & "\" & HeadFilename & ".fem"
 End Sub
 
 Sub FinalizeScripts(ScriptName As String)

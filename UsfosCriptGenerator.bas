@@ -1,4 +1,3 @@
-Attribute VB_Name = "UsfosCriptGenerator"
 Const SCRIPT_DIR As String = "\script_rodar_"
 Const STRASPAS As String = """"   'defining aspas to be inside strings
 
@@ -58,10 +57,10 @@ Private Sub ProcessCase(ByVal row As Long)
     Dim BeltempFilename As String
     Dim BeltempFile As String
     Dim fire As String
+    Dim HeadFile As String
     Dim HeadFilename As String
     Dim InputFile As String
-    Dim HeadDefaultFile As String
-    Dim HeadCaseFile As String
+
 
     ' Check for necessary conditions before proceeding
     'If Not IsCaseValid(row) Then Exit Sub  'TODO: Consider when cases are not valid to stop macro
@@ -76,29 +75,32 @@ Private Sub ProcessCase(ByVal row As Long)
     If shtScriptUsfos.Cells(row, "R") = "" Then shtScriptUsfos.Cells(row, "R") = shtScriptUsfos.Cells(23, "W") ' Factor Termal Loads
     
     ' Initialize values from the sheet
-    ScriptsHandling.InitializeCaseValues row, scenarioName, CaseFolder, ModelFileName, BeltempFilename, BeltempFile, fire, HeadFilename, InputFile, HeadDefaultFile, HeadCaseFile 'TODO: Change this to a function
+    ScriptsHandling.InitializeCaseValues row, scenarioName, CaseFolder, ModelFileName, BeltempFilename, fire, HeadFilename, InputFile 'TODO: Change this to a function
+    
+    HeadDefaultFile = CURRENT_FOLDER & HEAD_DEFAULT_FILE
     
     
     ' Generate Strain and Strain Neg Input
     GerarStrainsInput scenarioName, CaseFolder
     
     ' Get info about last load case and last time
-    Set LastLoadCaseInfo = GetLastLoadCaseInfos(BeltempFile)
+    BeltempFilePath = CaseFolder & "\" & BeltempFilename & ".fem"
+    Set LastLoadCaseInfo = GetLastLoadCaseInfos(BeltempFilePath)
     LastLoadCase = LastLoadCaseInfo("load case")                    'last loadcase number
      
     ProcessFireInfo fire, row, scenarioName
     
     
     ' Copy and modify head file
-    Set FSObject = CreateObject("Scripting.FileSystemObject")
-    FSObject.CopyFile HeadDefaultFile, HeadCaseFile, True
-    
-    ' Copy and modify model file
-    ModelFile = ModelFileName & ".fem"
-    FSObject.CopyFile HeadDefaultFile, HeadCaseFile, True
+    HeadFile =  HeadFilename & ".fem"
+    CopyCaseFile CURRENT_FOLDER, CaseFolder,  HeadFile
         
     ' Change head file to set pushdown commands
     ModifyHeadFile HeadCaseFile, LastLoadCase
+
+    ' Copy and modify model file
+    ModelFile = ModelFileName & ".fem"
+    CopyCaseFile CURRENT_FOLDER, CaseFolder,  ModelFile
     
     ' Creating Input file to be used for scripts files
     CreateInputFile InputFile, HeadFilename, ModelFileName, BeltempFilename, scenarioName
