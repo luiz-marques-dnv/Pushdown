@@ -388,11 +388,11 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
         test_3sided_I = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(ShtStrain.Cells(PFPElementNumber, "B"), shtGenie.Range("C2:C50000"), 1, False), "N")
 
         If Err = 0 Then
-            shtScriptUsfos.Cells(i, "M") = shtScriptUsfos.Cells(i, "M") & "     " & test_3sided_I
-            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (i - 2) * 5 + 1).End(xlUp).row
+            shtScriptUsfos.Cells(row, "M") = shtScriptUsfos.Cells(row, "M") & "     " & test_3sided_I
+            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 1).End(xlUp).row
 
             If verify = True Then
-                shtPFP3sided.Cells(ultlinhaPFP + 1, (i - 2) * 5 + 3) = test_3sided_I
+                shtPFP3sided.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = test_3sided_I
             End If
         End If
         
@@ -402,11 +402,11 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
         test_3sided_box = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(ShtStrain.Cells(PFPElementNumber, "B"), shtGenie.Range("D2:D50000"), 1, False), "N")
 
         If Err = 0 Then
-            shtScriptUsfos.Cells(i, "N") = shtScriptUsfos.Cells(i, "N") & "     " & test_3sided_box
-            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (i - 2) * 5 + 1).End(xlUp).row
+            shtScriptUsfos.Cells(row, "N") = shtScriptUsfos.Cells(row, "N") & "     " & test_3sided_box
+            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 1).End(xlUp).row
 
             If verify = True Then
-                shtPFP3sided.Cells(ultlinhaPFP + 1, (i - 2) * 5 + 3) = test_3sided_box
+                shtPFP3sided.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = test_3sided_box
             End If
         End If
     End If
