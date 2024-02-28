@@ -74,6 +74,13 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     Dim pfpEligibleElement As ElementType
     Dim filteredloadCaseData As Collection
     Dim remainingloadCaseData As Collection
+    Dim HighestStrain As Double
+    Dim HighestStrainTime As Double
+    Dim ElementsPositiveCriteria As Scripting.Dictionary
+    Dim ElementsNegativeCriteria As Scripting.Dictionary
+    Dim FilteredTimes As Collection
+    Dim RemainingFilteredTime As Collection
+    Dim CriteriaCheck As Variant
 
     For row = 2 To ultimaLinha
         If Not AuxMacros.IsCompleted(row) Then
@@ -131,7 +138,11 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                 Set FilteredTimes = GetFilteredTimes(BeltempTimes, BeltempTemperatures)
 
                 ' TODO: Remove BeltempTimes as parameter after analisys check
-                HighestElementStrain = ExecuteCriteriasCheck(FilteredTimes, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
+                CriteriaCheck = ExecuteCriteriasCheck(FilteredTimes, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
+                
+                ' Retrievieng the highest strain element and time
+                HighestElementStrain = CriteriaCheck(0)
+                HighestStrainTime = CriteriaCheck(1)
 
                 ' Check if the filtered load case data was enough to find a PFP element
                 If HighestElementStrain = 0 Then
@@ -139,7 +150,11 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     ' Get the remaining load case data
                     Set RemainingFilteredTime = GetRemainingFilteredTime(BeltempTimes, FilteredTimes)
                     ' TODO: Remove BeltempTimes after analisys check
-                    HighestElementStrain = ExecuteCriteriasCheckAll(RemainingFilteredTime, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
+                    CriteriaCheck = ExecuteCriteriasCheck(RemainingFilteredTime, scenarioName, caseFolderPath, iter, strainCriteria, BeltempTimes)
+
+                    ' Retrievieng the highest strain element and time
+                    HighestElementStrain = CriteriaCheck(0)
+                    HighestStrainTime = CriteriaCheck(1)
                 End If
 
                 If HighestElementStrain <> 0 Then
@@ -158,8 +173,16 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     ' Update Completion Status
                     shtScriptUsfos.Cells(row, "S") = "on going"
     
-                ElseIf HighestStrain = 0 Then
+                ' If the highest strain is 0, then the criteria was met. Finally update to the case with highest strain
+                ElseIf HighestElementStrain = 0 Then
+                    ' Update Head USFOS file
+                    UpdateHeadUsfos time, scenarioName, caseFolderPath
+
+                    ' Running Usfos
+                    ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
+
                     shtScriptUsfos.Cells(row, "S") = "completed"
+
                 End If
 
             End If
@@ -174,12 +197,15 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     End If
 End Sub
 
-Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, AllBeltempTimes) As Long
+
+Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, AllBeltempTimes) As Variant
     Dim time As Variant
     Dim loadCase As Long
     Dim pfpEligibleElement As ElementType
     Dim HighestStrain As Double
+    Dim HighestPFPStrain As Double
     Dim HighestElementStrain As Long
+    Dim ElementsPositiveCriteria As Scripting.Dictionary
     
     For Each time In BeltempTimes
         ' Update Head USFOS file
@@ -193,72 +219,46 @@ Private Function ExecuteCriteriasCheck(BeltempTimes, scenarioName, caseFolderPat
         'ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
         
         ' Process strain criteria
-        pfpEligibleElement = ProcessStrainCriteria(scenarioName, caseFolderPath, strainCriteria)
-        
-        ' Read elements above buckling criteria
-        ProcessBucklingCriteria iter
-        
-        Debug.Print time, pfpEligibleElement.Strain
-        
-        'Copying starin files just to check    TODO: Delete after checking
-        CopyStrainFiles scenarioName, caseFolderPath, iter, time, AllBeltempTimes
-        
-        If pfpEligibleElement.Strain <> 0 Then
+        Set ElementsAboveCriteria = ProcessStrainCriteria(scenarioName, caseFolderPath, strainCriteria)
 
-            ExecuteCriteriasCheck = pfpEligibleElement.Number
+        ' Get the highest strain considering that ElementsAboveCriteria is sorted from highest to lowest strain
+        HighestStrainCriteria = ElementsAboveCriteria.Items(0)
 
-            Exit Function
-        End If
-    
-    Next time
-    ExecuteCriteriasCheck = pfpEligibleElement.Number
-
-End Function
-
-Private Function ExecuteCriteriasCheckAll(BeltempTimes, scenarioName, caseFolderPath, iter, strainCriteria, AllBeltempTimes) As Long
-    Dim time As Variant
-    Dim loadCase As Long
-    Dim pfpEligibleElement As ElementType
-    Dim HighestStrain As Double
-    Dim HighestElementStrain As Long
-    
-    For Each time In BeltempTimes
-        ' Update Head USFOS file
-        UpdateHeadUsfos time, scenarioName, caseFolderPath
-
-        ' Running Usfos
-        ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
-
-        ' Running strain and Straing neg to get values outside criteria
-        ExecuteProgram Program.Strain, caseFolderPath, scenarioName
-        'ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
-        
-        ' Process strain criteria
-        pfpEligibleElement = ProcessStrainCriteria(scenarioName, caseFolderPath, strainCriteria)
+        ' Find the highest strain element eligible for PFP (critical element)
+        pfpEligibleElement = FindPFPEligibleElement(ElementsPositiveCriteria)
         
         ' Read elements above buckling criteria
         ProcessBucklingCriteria iter
 
-        If pfpEligibleElement.Strain > HighestStrain Then
-            HighestStrain = pfpEligibleElement.Strain
+        ' Update the highest eligeble strain and element if the current strain is higher
+        If pfpEligibleElement.Strain > HighestPFPStrain Then
+            HighestPFPStrain = pfpEligibleElement.Strain
             HighestElementStrain = pfpEligibleElement.Number
         End If
+
+        ' Update the highest strain and time if the current strain is higher
+        if HighestStrainCriteria > HighestStrain Then
+            Highestrain = HighestStrainCriteria
+            HighestStrainTime = time
+        End If
         
         'Copying starin files just to check    TODO: Delete after checking
         CopyStrainFiles scenarioName, caseFolderPath, iter, time, AllBeltempTimes
 
     Next time
 
-    ExecuteCriteriasCheckAll = HighestElementStrain
+
+
+    ExecuteCriteriasCheck = Array(HighestElementStrain, HighestStrainTime)
 
 End Function
 
-Private Function ProcessStrainCriteria(ByVal scenarioName As String, ByVal caseFolderPath As String, ByVal strainCriteria As Double) As ElementType
+Private Function ProcessStrainCriteria(ByVal scenarioName As String, ByVal caseFolderPath As String, ByVal strainCriteria As Double) As Scripting.Dictionary
     Dim FileStrain As String
     Dim FileStrainNeg As String
     Dim ElementsPositiveCriteria As Scripting.Dictionary
     Dim ElementsNegativeCriteria As Scripting.Dictionary
-    Dim pfpEligibleElement As ElementType
+
     'Dim ElementsNegativeCriteria As Collection
 
     ' Common setup for strain and strain_neg
@@ -269,15 +269,11 @@ Private Function ProcessStrainCriteria(ByVal scenarioName As String, ByVal caseF
     
     ' Process negative strain criteria                                                              TODO: make negative criteria an option
     'set ElementsNegativeCriteria = GetElementsAboveCriteriaStrain FileStrainNeg, StrainCriteria*-1
-
-    
-    'pfpEligibleElement ElementsPositiveCriteria, ElementsNegativeCriteria                          TODO: make negative criteria an option
-    pfpEligibleElement = FindPFPEligibleElement(ElementsPositiveCriteria)
     
     ' Upadate Complete or on going status
     'UpdateCompletionStatus row, PFPElement
 
-    ProcessStrainCriteria = pfpEligibleElement
+    Set ProcessStrainCriteria = ElementsPositiveCriteria
 End Function
 
 Private Sub StrainsFilePaths(ByVal scenarioName As String, ByVal caseFolderPath As String, ByRef FileStrain As String, ByRef FileStrainNeg As String)
