@@ -8,12 +8,11 @@ Public Enum Program
     SRAINNeg
 End Enum
 
-Private Type ElementType
+Public Type ElementType
     Number As Long
     Strain As Double
 
 End Type
-
 Sub Run_analysis()
     ' Initialization
     Dim ultimaLinha As Long
@@ -78,6 +77,9 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     Dim UsfosShell As Variant
     Dim StrainShell As Variant
     Dim StrainNegShell As Variant
+    Dim HighestPFPStrain As Double
+    Dim HighestElementStrain As Long
+    Dim ElementsPositiveCriteria As Scripting.Dictionary
     
     If iter = 1 Then
         'Defining commands paths to be run
@@ -117,16 +119,21 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                 ' Initialize values from the sheet
                 'TODO: Change this to a class
                 InitializeCaseValues row, scenarioName, caseFolderPath, BeltempFilePath
+                
+                ' Reset values for new scenario
+                HighestStrain = 0
+                HighestElementStrain = 0
     
     
                 ' Extract the load case data from the Beltemp file
                 Set loadCaseData = ExtractLoadCaseData(BeltempFilePath)
                 
-                STartTime = Timer
+                startTime = Timer
                 For Each loadCaseTimeDetails In loadCaseData
                     loadcase = loadCaseTimeDetails(0)
                     LoadCaseTime = loadCaseTimeDetails(1)
 
+                    
                     ' Update Head USFOS file
                     UpdateHeadUsfos row, LoadCaseTime
     
@@ -138,25 +145,38 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     'ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
                     
                     ' Process strain criteria
-                    pfpEligibleElement = ProcessStrainCriteria(row)
+                    Set ElementsAboveCriteria = ProcessStrainCriteria(scenarioName, caseFolderPath, strainCriteria)
+
+                    ' Get the highest strain considering that ElementsAboveCriteria is sorted from highest to lowest strain
+                    HighestStrainCriteria = ElementsAboveCriteria.Items(0)
+
+                    ' Find the highest strain element eligible for PFP (critical element)
+                    pfpEligibleElement = FindPFPEligibleElement(ElementsPositiveCriteria)
                     
                     ' Read elements above buckling criteria
                     ProcessBucklingCriteria iter
     
-                    If pfpEligibleElement.Strain <> 0> Then
-                        GoTo NextIteration
+                    ' Update the highest eligeble strain and element if the current strain is higher
+                    If pfpEligibleElement.Strain > HighestPFPStrain Then
+                        HighestPFPStrain = pfpEligibleElement.Strain
+                        HighestElementStrain = pfpEligibleElement.Number
+                    End If
+
+                    ' Update the highest strain and time if the current strain is higher
+                    if HighestStrainCriteria > HighestStrain Then
+                        Highestrain = HighestStrainCriteria
+                        HighestStrainTime = LoadCaseTime
                     End If
                     
                     'Copying starin files just to check    TODO: Delete after checking
                     CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
-
-                Next loadCaseTimeDetails
 NextIteration:
-                Debug.Print Timer - STartTime
+                Next loadCaseTimeDetails
                 
-                If pfpEligibleElement <> 0 Then
+
+                If HighestStrain <> 0 Then
                     ' Write PFP element to the script file
-                    writePFPElement row, pfpEligibleElement
+                    writePFPElement row, HighestElementStrain
     
                     ' Update Fahts for on going cases
                     UpdateHeadFahts row
@@ -168,11 +188,17 @@ NextIteration:
     
                     ' Update Completion Status
                     shtScriptUsfos.Cells(row, "S") = "on going"
-    
-                ElseIf pfpEligibleElement = 0 Then
-                    shtScriptUsfos.Cells(row, "S") = "completed"
-                End If
 
+                ' If the highest strain is 0, then the criteria was met. Finally update to the case with highest strain
+                ElseIf HighestElementStrain = 0 Then
+                    ' Update Head USFOS file
+                    UpdateHeadUsfos HighestStrainTime, scenarioName, caseFolderPath
+
+                    ' Running Usfos
+                    ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
+                    
+                End If
+                
             End If
         Next row
     End If
@@ -331,11 +357,11 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
         test_3sided_I = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(ShtStrain.Cells(PFPElementNumber, "B"), shtGenie.Range("C2:C50000"), 1, False), "N")
 
         If Err = 0 Then
-            shtScriptUsfos.Cells(i, "M") = shtScriptUsfos.Cells(i, "M") & "     " & test_3sided_I
-            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (i - 2) * 5 + 1).End(xlUp).row
+            shtScriptUsfos.Cells(row, "M") = shtScriptUsfos.Cells(row, "M") & "     " & test_3sided_I
+            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 1).End(xlUp).row
 
             If verify = True Then
-                shtPFP3sided.Cells(ultlinhaPFP + 1, (i - 2) * 5 + 3) = test_3sided_I
+                shtPFP3sided.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = test_3sided_I
             End If
         End If
         
@@ -345,11 +371,11 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
         test_3sided_box = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(ShtStrain.Cells(PFPElementNumber, "B"), shtGenie.Range("D2:D50000"), 1, False), "N")
 
         If Err = 0 Then
-            shtScriptUsfos.Cells(i, "N") = shtScriptUsfos.Cells(i, "N") & "     " & test_3sided_box
-            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (i - 2) * 5 + 1).End(xlUp).row
+            shtScriptUsfos.Cells(row, "N") = shtScriptUsfos.Cells(row, "N") & "     " & test_3sided_box
+            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 1).End(xlUp).row
 
             If verify = True Then
-                shtPFP3sided.Cells(ultlinhaPFP + 1, (i - 2) * 5 + 3) = test_3sided_box
+                shtPFP3sided.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = test_3sided_box
             End If
         End If
     End If
@@ -774,6 +800,7 @@ Sub CopyFahtsOutFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal 
     Set FSObject = CreateObject("Scripting.FileSystemObject")
     FSObject.CopyFile SourceFilePath, DestinationFilePath, True
 End Sub
+
 
 
 
