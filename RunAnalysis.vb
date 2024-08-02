@@ -297,8 +297,9 @@ Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef this
         'Copying starin files just to check    TODO: Delete after checking
         CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, iter, loadcase
 
-        ' Copying Usfos files just to check    TODO: Delete after checking
-
+        ' Copying Status files just to check buckling    TODO: Delete after checking
+        CopyStatusFiles thisScenario.Name, thisScenario.FolderPath, iter, loadcase
+        
         ' Reset Eligible Element to default values
         pfpEligibleElement = blankElement
     Next loadCaseTimeDetails
@@ -828,6 +829,32 @@ Sub CopyStrainFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal it
     ' Copy the strain files to the directory
     SourceFilePath = caseFolderPath & "\" & scenarioName & "_strain_output"
     DestinationFilePath = StrainFoldePath & "\" & scenarioName & "_strain_output_" & "iter_" & iter & "_LC_" & loadcase
+
+    ' Copy strain files to the directory
+    Set FSObject = CreateObject("Scripting.FileSystemObject")
+    FSObject.CopyFile SourceFilePath, DestinationFilePath, True
+End Sub
+
+Sub CopyStatusFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal iter As Long, loadcase As Long)
+    ' Create a directory for statusfiles if it doesn't exist
+    Dim StrainDirectory As String
+    Dim SourceFile As String
+    Dim DestinationFile As String
+    Dim FSObject As Object
+    Dim StrainFiles As String
+    
+    StatusFoldePath = caseFolderPath & "\StatusFiles"
+    If Dir(StatusFoldePath, vbDirectory) = "" Then  ' Check if the directory already exists
+        On Error Resume Next
+        MkDir StatusFoldePath
+        On Error GoTo 0
+    End If
+
+    ' Copy the status files to the directory 
+
+    SourceFilePath = caseFolderPath & "\" & scenarioName & "_usfos_output_status.text"
+    DestinationFilePath = StatusFoldePath & "\" & scenarioName & "_usfos_output_status_" & "iter_" & iter & _
+                        "_LC_" & loadcase & ".text"
 
     ' Copy strain files to the directory
     Set FSObject = CreateObject("Scripting.FileSystemObject")
