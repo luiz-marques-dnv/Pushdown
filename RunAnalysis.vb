@@ -1,17 +1,15 @@
 Const HEAD_DEFAULT_FILE As String = "\usfos_head_default.fem"
 Const STRASPAS As String = """"   'defining aspas to be inside strings
+Public checkStrainNegCriteria As Double
 
-Public Enum Program
-    FAHTS
-    USFOS
-    Strain
-    SRAINNeg
-End Enum
-
-Private Type ElementType
+Type ScenarioType
+    Name As String
     Number As Long
-    Strain As Double
-
+    FolderPath As String
+    BeltempFilePath As String
+    FileStrain As String
+    FileStrainNeg As String
+    StrainCriteria As Double
 End Type
 
 Sub Run_analysis()
@@ -30,6 +28,9 @@ Sub Run_analysis()
     AuxMacros.setCurrentFolder
     
     ultimaLinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
+
+    checkStrainNegCriteria = shtScriptUsfos.Cells("W32")
+
     iter = InitializeIteration()
     
     ' Main processing loop
@@ -62,11 +63,19 @@ End Function
 
 Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     Dim row As Long
-    Dim scenarioName As String
-    Dim caseFolderPath As String
-    Dim BeltempFilePath As String
     Dim loadCaseData As Collection
-
+    Dim shellCommandUsfos As String
+    Dim shellCommandStrain As String
+    Dim shellCommandStrainNeg As String
+    Dim strainCriteria As Double
+    Dim ElementsAboveCriteria As Scripting.Dictionary
+    Dim pfpEligibleElement As ElementType
+    Dim HighestStrainTime As Double
+    Dim methodOutput As Variant
+    Dim PFPElement As Long
+    Dim thisScenario As ScenarioType
+    Dim blankScenario As ScenarioType
+    
     
     If iter = 1 Then
         'Defining commands paths to be run
@@ -75,15 +84,21 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
         shellCommandStrainNeg = """" & CURRENT_FOLDER & "\" & "script_rodar_STRAIN_neg.bat" & """"
         
         ' Running Usfos
-        UsfosShell = ExecuteShellCommand(shellCommandUsfos)
+        ExecuteShellCommand shellCommandUsfos
 
         ' Running strain and Straing neg to get values outside criteria
-        StrainShell = ExecuteShellCommand(shellCommandStrain)
-        StrainNegShell = ExecuteShellCommand(shellCommandStrainNeg)
+        ExecuteShellCommand shellCommandStrain
+        ExecuteShellCommand shellCommandStrainNeg
         
         For row = 2 To ultimaLinha
-             ' Process strain criteria
-            pfpEligibleElement = ProcessStrainCriteria(row)
+            ' Initialize values from the sheet
+            UpdateScenariosAttributes row, thisScenario
+        
+            ' Process strain criteria
+            Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.StrainCriteria)
+
+            ' Find the highest strain element eligible for PFP (critical element)
+            pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria)
     
             ' TODO: hange thi condition handling
             If pfpEligibleElement.Number <> 0 Then
@@ -94,6 +109,9 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
             ElseIf pfpEligibleElement.Number = 0 Then
                 shtScriptUsfos.Cells(row, "S") = "completed"
             End If
+
+            ' Reset thisScenario to default values
+            thisScenario = blankScenario
         Next row
 
         ' Create a folder and Copy first Run files
@@ -104,29 +122,23 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
         For row = 2 To ultimaLinha
             If Not AuxMacros.IsCompleted(row) Then
                 ' Initialize values from the sheet
-                'TODO: Change this to a class
-                InitializeCaseValues row, scenarioName, caseFolderPath, BeltempFilePath
-    
+                ' TODO: Change this to a class
+                UpdateScenariosAttributes row, thisScenario
+            
                 ' Extract the load case data from the Beltemp file
-                Set loadCaseData = ExtractLoadCaseData(BeltempFilePath)
+                Set loadCaseData = ExtractLoadCaseData(thisScenario.BeltempFilePath)
+                
+                ' Get desired load case time based on desired method
+                methodOutput = GetMethodOutputs(loadCaseData, thisScenario, "HighestTrainMethod")
 
-                ' Get a subset from loadCaseData so less load cases are processed
-                Set filteredloadCaseData = GetFilteredLoadCaseData(loadCaseData)
+                ' Getting outputs depending on method
+                HighestStrainTime = methodOutput(0)
+                PFPElement = methodOutput(1)
 
-                HighestElementStrain = ExecuteCriteriasCheck row, filteredloadCaseData, scenarioName, caseFolderPath, iter
-
-                ' Check if the filtered load case data was enough to find a PFP element 
-                If HighestElementStrain = 0 Then
-
-                    ' Get the remaining load case data
-                    Set remainingloadCaseData = GetRemainingLoadCaseData(loadCaseData, filteredloadCaseData)
-
-                    ExecuteCriteriasCheck row, remainingloadCaseData, HighestStrain, HighestElementStrain, scenarioName, caseFolderPath, iter, loadcase, LoadCaseTime, pfpEligibleElement, loadCaseTimeDetails, loadCaseDataFiltered
-                End If
-
-                If HighestElementStrain <> 0 Then
+                ' Get the highest strain time
+                If PFPElement<> 0 Then
                     ' Write PFP element to the script file
-                    writePFPElement row, HighestElementStrain
+                    writePFPElement row, PFPElement
     
                     ' Update Fahts for on going cases
                     UpdateHeadFahts row
@@ -138,12 +150,26 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     
                     ' Update Completion Status
                     shtScriptUsfos.Cells(row, "S") = "on going"
-    
-                ElseIf HighestElementStrain = 0 Then
+
+                ' If PFP Element is 0, then the criteria was met and no other element needs pfp. 
+                ' Finally update to the case with highest strain for plotting
+                ElseIf PFPElement = 0 Then
+                    ' Update Head USFOS file
+                    UpdateHeadUsfos row, HighestStrainTime
+
+                    ' Running Usfos
+                    ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
+                    
+                    ' Running strain and Straing neg to get values outside criteria
+                    ExecuteProgram Program.Strain, caseFolderPath, scenarioName
+                    
                     shtScriptUsfos.Cells(row, "S") = "completed"
                 End If
-
+                
             End If
+
+            ' Reset thisScenario to default values
+            thisScenario = blankScenario
         Next row
     End If
 
@@ -156,90 +182,121 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     End If
 End Sub
 
-Private ExecuteCriteriasCheck(ByVal row As Long, ByVal loadCaseData As Collection, ByVal scenarioName As String, ByVal caseFolderPath As String, ByVal iter As Long) As Long
-    ' This function executes the strain criteria and Buckling check for the load cases in the loadCaseData collection
+Private Sub UpdateScenariosAttributes(ByVal row As Long, ByRef thisScenario As ScenarioType) 
+    ' Update the scenario attributes based on the row values TODO: Change this to a class
+    Dim BeltempFilename As String
+    Dim scenarioName As String
+    Dim caseFolderPath As String
+    Dim BeltempFilePath As String
+    Dim scenarioAttributes As ScenarioType
+
+    ' Initialize and fetch values from the worksheet
+    thisScenario.Number = shtScriptFaths.Cells(row, "A")
+    thisScenario.Name = shtScriptUsfos.Cells(row, "B")
+    thisScenario.StrainCriteria = shtScriptUsfos.Cells(row, "I")
+
+    thisScenario.FolderPath = CURRENT_FOLDER & "\" & thisScenario.Number & "_" & thisScenario.Name
+    
+    BeltempFilename = thisScenario.Name & "_output_beltemp"
+    thisScenario.BeltempFilePath = thisScenario.FolderPath & "\" & BeltempFilename & ".fem"
+
+    thisScenario.FileStrain = thisScenario.FolderPath & "\" & thisScenario.Name & "_strain_output"
+    thisScenario.FileStrainNeg = thisScenario.FolderPath & "\" & thisScenario.Name & "_strain_neg_output"
+End Sub
+
+Private Function GetMethodOutputs(ByVal loadCaseData As Collection,ByRef thisScenario As scenarioType,ByVal method As String) As Double
+    ' Get the load case time based on the desired method
+    Dim LoadCaseTime As Double
+    
+    Select Case method
+        Case "HighestTrainMethod"
+            MethodsOutput = HighestTrainMethod(loadCaseData, thisScenario)
+    End Select
+    
+    GetMethodOutputs = MethodsOutput
+End Function
+
+Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef thisScenario As scenarioType) As Double
+    ' Get the time of the highest strain element above criteria
     Dim loadCaseTimeDetails As Variant
     Dim loadcase As Long
     Dim LoadCaseTime As Double
-    Dim pfpEligibleElement As ElementType
+    Dim HighestStrainTime As Double
+    Dim HighestPFPStrain As Double
     Dim HighestStrain As Double
     Dim HighestElementStrain As Long
+    Dim HighestStrainCriteria As Double
+    Dim ElementsAboveCriteria As Scripting.Dictionary
+    Dim ElementsAbove0Criteria As Scripting.Dictionary
+    Dim pfpEligibleElement As ElementType
+    
+    HighestStrain = 0
+    HighestElementStrain = 0
+    HighestStrainCriteria = 0
 
     For Each loadCaseTimeDetails In loadCaseData
-            loadcase = loadCaseTimeDetails(0)
-            LoadCaseTime = loadCaseTimeDetails(1)
+        loadcase = loadCaseTimeDetails(0)
+        LoadCaseTime = loadCaseTimeDetails(1)
 
+        ' Update Head USFOS file
+        UpdateHeadUsfos row, LoadCaseTime
+
+        ' Running Usfos
+        ExecuteProgram Program.USFOS, thisScenario.FolderPath, thisScenario.Name
+
+        ' Running strain to get values outside criteria
+        ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
+
+        ' Process positive strain criteria
+        Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.StrainCriteria)
+        
+        ' Find the highest strain element eligible for PFP (critical element)
+        pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria)
+
+
+        if checkStrainNegCriteria = 1 and pfpEligibleElement.Number = 0 then
+            ' Running straing neg to get values outside criteria
+            ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
+
+            ' Process negative strain criteria
+            Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrainNeg, thisScenario.StrainCriteria*-1)
+        end if
+        
+
+        ' Process strain criteria with 0 to store the highest strain of all
+        Set ElementsAbove0Criteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.StrainCriteria)
+        
+        ' Get the highest strain considering that ElementsAboveCriteria is sorted from highest to lowest strain
+        If ElementsAbove0Criteria.Count > 0 Then
+            HighestStrainCriteria = ElementsAbove0Criteria.Items(0)
             
-            ' Update Head USFOS file
-            UpdateHeadUsfos row, LoadCaseTime
+        End If
 
-            ' Running Usfos
-            ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
+        ' Read elements above buckling criteria
+        'ProcessBucklingCriteria iter
 
-            ' Running strain and Straing neg to get values outside criteria
-            ExecuteProgram Program.Strain, caseFolderPath, scenarioName
-            'ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
-            
-            ' Process strain criteria
-            pfpEligibleElement = ProcessStrainCriteria(row)
-            
-            ' Read elements above buckling criteria
-            ProcessBucklingCriteria iter
+        ' Update the highest eligeble strain and element if the current strain is higher
+        If pfpEligibleElement.Strain > HighestPFPStrain Then
+            HighestPFPStrain = pfpEligibleElement.Strain
+            HighestElementStrain = pfpEligibleElement.Number
+        End If
+        
 
-            If pfpEligibleElement.Strain > HighestStrain Then
-                HighestStrain = pfpEligibleElement.Strain
-                HighestElementStrain = pfpEligibleElement.Number
-            End If
-            
-            'Copying starin files just to check    TODO: Delete after checking
-            CopyStrainFiles scenarioName, caseFolderPath, iter, loadcase
-
-        Next loadCaseTimeDetails
-    ExecuteCriteriasCheck = HighestElementStrain
-
-Private Function ProcessStrainCriteria(ByVal row As Long) As ElementType
-    Dim FileStrain As String
-    Dim FileStrainNeg As String
-    Dim strainCriteria As Double
-    Dim ElementsPositiveCriteria As Scripting.Dictionary
-    Dim ElementsNegativeCriteria As Scripting.Dictionary
-    Dim pfpEligibleElement As ElementType
-    'Dim ElementsNegativeCriteria As Collection
+        ' Update the highest strain and time if the current strain is higher
+        If HighestStrainCriteria >= HighestStrain Then
+            HighestStrain = HighestStrainCriteria
+            HighestStrainTime = LoadCaseTime
+        End If
+        
+        'Copying starin files just to check    TODO: Delete after checking
+        CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, iter, loadcase
+    Next loadCaseTimeDetails
     
-    strainCriteria = shtScriptUsfos.Cells(row, "I")
 
-    ' Common setup for strain and strain_neg
-    StrainsFilePaths row, FileStrain, FileStrainNeg
-
-    ' Process positive strain criteria
-    Set ElementsPositiveCriteria = GetElementsAboveCriteriaStrain(FileStrain, strainCriteria)
-    
-    ' Process negative strain criteria                                                              TODO: make negative criteria an option
-    'set ElementsNegativeCriteria = GetElementsAboveCriteriaStrain FileStrainNeg, StrainCriteria*-1
-
-    
-    'pfpEligibleElement ElementsPositiveCriteria, ElementsNegativeCriteria                          TODO: make negative criteria an option
-    pfpEligibleElement = FindPFPEligibleElement(ElementsPositiveCriteria)
-    
-    ' Upadate Complete or on going status
-    'UpdateCompletionStatus row, PFPElement
-
-    ProcessStrainCriteria = pfpEligibleElement
+    GetHighestStrainTime = HighestStrainTime
 End Function
 
-Private Sub StrainsFilePaths(ByVal row As Long, ByRef FileStrain As String, ByRef FileStrainNeg As String)
-    Dim scenarioName As String
-    Dim caseFolderPath As String
-    Dim FilenameStrain As String
-    Dim FilenameStrain_neg As String
 
-    scenarioName = shtScriptUsfos.Cells(row, "B")
-    FilenameStrain = scenarioName & "_strain_output"
-    FilenameStrain_neg = scenarioName & "_strain_neg_output"
-    caseFolderPath = CURRENT_FOLDER & "\" & shtScriptUsfos.Cells(row, "A") & "_" & scenarioName
-    FileStrain = caseFolderPath & "\" & FilenameStrain
-    FileStrainNeg = caseFolderPath & "\" & FilenameStrain_neg
-End Sub
 Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strainCriteria) As Scripting.Dictionary
     ' Process the strain file (either positive or negative) and returns a dinamic array of elements with number and strain that have a strain above the criteria
     ' It will overwrites the array if high loadcase is found
@@ -269,7 +326,7 @@ Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strain
                 elementLine_Array = Split(elementLine, " ")                    ' the array should be: Element No, Strain, %
                 ElementNumber = elementLine_Array(0)
                 ElementStrain = elementLine_Array(1)
-                If Abs(ElementStrain) > strainCriteria Then
+                If Abs(ElementStrain) >= Abs(strainCriteria) Then
                     elementsStrain.Add ElementNumber, ElementStrain
                 End If
                 Line Input #strainFile, lineFromFile
@@ -294,17 +351,17 @@ End Sub
 Private Function FindPFPEligibleElement(ByRef elementsStrain As Scripting.Dictionary) As ElementType
     'Verificar se elemento é elegível para receber PFP e retorna o numero do elemento elegível
     Dim test_strain As Long
-    Dim Element As ElementType
+    Dim element As ElementType
     Dim i As Long
     
     If elementsStrain.Count > 0 Then
         For i = 0 To elementsStrain.Count - 1
-            Element.Number = elementsStrain.Keys(i)
-            Element.Strain = elementsStrain.Items(i)
+            element.Number = elementsStrain.Keys(i)
+            element.Strain = elementsStrain.Items(i)
             On Error Resume Next
-            test_strain = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(Element.Number, shtGenie.Range("A2:A50000"), 1, False), "N")
+            test_strain = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(element.Number, shtGenie.Range("A2:A50000"), 1, False), "N")
             If Err = 0 Then
-                  FindPFPEligibleElement = Element
+                  FindPFPEligibleElement = element
                   Exit Function
             End If
 
@@ -339,28 +396,41 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
 
         'Verificar se elemento é elegível para receber PFP 3-sided I profile
         On Error Resume Next
-        test_3sided_I = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(ShtStrain.Cells(PFPElementNumber, "B"), shtGenie.Range("C2:C50000"), 1, False), "N")
+        test_3sided_I = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(PFPElementNumber, shtGenie.Range("C2:C50000"), 1, False), "N")
 
         If Err = 0 Then
-            shtScriptUsfos.Cells(i, "M") = shtScriptUsfos.Cells(i, "M") & "     " & test_3sided_I
-            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (i - 2) * 5 + 1).End(xlUp).row
+            shtScriptUsfos.Cells(row, "M") = shtScriptUsfos.Cells(row, "M") & "     " & test_3sided_I
+            ultlinhaPFP3Sided = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 1).End(xlUp).row
+            verify = True
+            For k = 2 To ultlinhaPFP3Sided + 1
+                If PFPElementNumber = shtPFP3sided.Cells(k, (row - 2) * 5 + 3) Then
+                    verify = False
+                    MsgBox ("Elemento 3-sided já protegido. Tente colocar como 4 sided")
+                End If
+            Next
 
             If verify = True Then
-                shtPFP3sided.Cells(ultlinhaPFP + 1, (i - 2) * 5 + 3) = test_3sided_I
+                shtPFP3sided.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = test_3sided_I
             End If
         End If
         
         
         'Verificar se elemento é elegível para receber PFP 3-sided box profile
         On Error Resume Next
-        test_3sided_box = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(ShtStrain.Cells(PFPElementNumber, "B"), shtGenie.Range("D2:D50000"), 1, False), "N")
+        test_3sided_box = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(PFPElementNumber, shtGenie.Range("D2:D50000"), 1, False), "N")
 
         If Err = 0 Then
-            shtScriptUsfos.Cells(i, "N") = shtScriptUsfos.Cells(i, "N") & "     " & test_3sided_box
-            ultlinhaPFP = shtPFP3sided.Cells(Rows.Count, (i - 2) * 5 + 1).End(xlUp).row
-
+            shtScriptUsfos.Cells(row, "N") = shtScriptUsfos.Cells(row, "N") & "     " & test_3sided_box
+            ultlinhaPFP3Sided = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 1).End(xlUp).row
+            verify = True
+            For k = 2 To ultlinhaPFP3Sided + 1
+                If PFPElementNumber = shtPFP3sided.Cells(k, (row - 2) * 5 + 3) Then
+                    verify = False
+                    MsgBox ("Elemento 3-sided já protegido. Tente colocar como 4 sided")
+                End If
+            Next
             If verify = True Then
-                shtPFP3sided.Cells(ultlinhaPFP + 1, (i - 2) * 5 + 3) = test_3sided_box
+                shtPFP3sided.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = test_3sided_box
             End If
         End If
     End If
@@ -455,19 +525,21 @@ Private Sub CopyCaseFile(ByVal sourcePath As String, ByVal destinationPath As St
 End Sub
 
 
-Private Function ExecuteShellCommand(ByVal command As String) As Variant
+Private Sub ExecuteShellCommand(ByVal command As String) As Variant
     On Error GoTo ErrorHandler
 
     Dim shellObject As Object
     Set shellObject = CreateObject("WScript.Shell")
-    ExecuteShellCommand = shellObject.Run(command, 1, True)
+    Dim ShellCommand As Variant
+    
+    ' Execute the command
+    ShellCommand = shellObject.Run(command, 1, True)
 
-     Exit Function
+    Exit Sub
 
 ErrorHandler:
     MsgBox "An error occurred: " & Err.Description
-    ExecuteShellCommand = Nothing
-End Function
+End Sub
 
 Private Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory As String, ByVal scenarioName As String)
     Dim executable As String
@@ -477,10 +549,11 @@ Private Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory 
     
 
     usfosBin = shtScriptUsfos.Range("W1")
+    FahtsExe = shtScriptUsfos.Range("W2")
 
     Select Case programName
         Case Program.FAHTS
-            executable = "..\Fahts\fahts_v670.exe"
+            executable = FahtsExe
             inputFileName = "input.inp"
 
         Case Program.USFOS
@@ -722,21 +795,10 @@ Private Function CriteriaMet(iter) As Boolean
     
     If iter > 0 And screening Then CriteriaMet = True
     
-    If iter = 50 Then CriteriaMet = True
+    If iter = 100 Then CriteriaMet = True
     
     
 End Function
-
-Private Sub InitializeCaseValues(ByVal row As Long, ByRef scenarioName, ByRef caseFolderPath As String, ByRef BeltempFilePath As String)
-    Dim BeltempFilename As String
-
-    ' Initialize and fetch values from the worksheet
-    scenarioName = shtScriptUsfos.Cells(row, "B")
-    
-    caseFolderPath = CURRENT_FOLDER & "\" & shtScriptFaths.Cells(row, "A") & "_" & scenarioName
-    BeltempFilename = scenarioName & "_output_beltemp"
-    BeltempFilePath = caseFolderPath & "\" & BeltempFilename & ".fem"
-End Sub
 
 Sub CopyStrainFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal iter As Long, loadcase As Long)
         ' Create a directory for strain files if it doesn't exist
@@ -785,6 +847,3 @@ Sub CopyFahtsOutFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal 
     Set FSObject = CreateObject("Scripting.FileSystemObject")
     FSObject.CopyFile SourceFilePath, DestinationFilePath, True
 End Sub
-
-
-
