@@ -135,7 +135,7 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                 HighestStrainTime = methodOutput(0)
                 PFPElement = methodOutput(1)
 
-                ' Get the highest strain time
+                ' Apply PFP on eligible element
                 If PFPElement<> 0 Then
                     ' Write PFP element to the script file
                     writePFPElement row, PFPElement
@@ -144,10 +144,12 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     UpdateHeadFahts row
                     
                     ' Running Fahts
-                    ExecuteProgram Program.FAHTS, caseFolderPath, scenarioName
+                    executeProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
+                    ExecuteProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
                     
-                    CopyFahtsOutFiles scenarioName, caseFolderPath, iter
-    
+                    ' Copying Fahts files just to check    TODO: Delete after checking
+                    CopyFahtsOutFiles thisScenario.Name, thisScenario.FolderPath, iter
+
                     ' Update Completion Status
                     shtScriptUsfos.Cells(row, "S") = "on going"
 
@@ -158,10 +160,10 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     UpdateHeadUsfos row, HighestStrainTime
 
                     ' Running Usfos
-                    ExecuteProgram Program.USFOS, caseFolderPath, scenarioName
+                    ExecuteProgram Program.USFOS, thisScenario.FolderPath, thisScenario.Name
                     
                     ' Running strain and Straing neg to get values outside criteria
-                    ExecuteProgram Program.Strain, caseFolderPath, scenarioName
+                    ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
                     
                     shtScriptUsfos.Cells(row, "S") = "completed"
                 End If
@@ -229,6 +231,7 @@ Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef this
     Dim ElementsAboveCriteria As Scripting.Dictionary
     Dim ElementsAbove0Criteria As Scripting.Dictionary
     Dim pfpEligibleElement As ElementType
+    Dim blankElement As ElementType
     
     HighestStrain = 0
     HighestElementStrain = 0
@@ -260,11 +263,14 @@ Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef this
 
             ' Process negative strain criteria
             Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrainNeg, thisScenario.StrainCriteria*-1)
+
+            ' Find the highest strain element eligible for PFP (critical element)
+            pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria)
         end if
         
 
         ' Process strain criteria with 0 to store the highest strain of all
-        Set ElementsAbove0Criteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.StrainCriteria)
+        Set ElementsAbove0Criteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, 0)
         
         ' Get the highest strain considering that ElementsAboveCriteria is sorted from highest to lowest strain
         If ElementsAbove0Criteria.Count > 0 Then
@@ -290,10 +296,14 @@ Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef this
         
         'Copying starin files just to check    TODO: Delete after checking
         CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, iter, loadcase
+
+        ' Copying Usfos files just to check    TODO: Delete after checking
+
+        ' Reset Eligible Element to default values
+        pfpEligibleElement = blankElement
     Next loadCaseTimeDetails
     
-
-    GetHighestStrainTime = HighestStrainTime
+    HighestTrainMethod = Array(HighestStrainTime, HighestElementStrain)
 End Function
 
 
