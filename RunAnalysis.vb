@@ -9,7 +9,8 @@ Type ScenarioType
     BeltempFilePath As String
     FileStrain As String
     FileStrainNeg As String
-    StrainCriteria As Double
+    strainCriteria As Double
+    row as Long
 End Type
 
 Sub Run_analysis()
@@ -29,19 +30,18 @@ Sub Run_analysis()
     
     ultimaLinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
 
-    checkStrainNegCriteria = shtScriptUsfos.Cells("W32")
+    checkStrainNegCriteria = shtScriptUsfos.Range("W32").Value
 
     iter = InitializeIteration()
     
     ' Main processing loop
     Do Until CriteriaMet(iter)
         iter = iter + 1
-        ' Update iteration number in the worksheet
-        shtScriptUsfos.Cells(17, 23) = iter
-        
-        
-        
+       
         ProcessIteration iter, ultimaLinha
+        
+         ' Update iteration number in the worksheet
+        shtScriptUsfos.Cells(17, 23) = iter
     Loop
 
     ' Finalization
@@ -74,7 +74,6 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     Dim methodOutput As Variant
     Dim PFPElement As Long
     Dim thisScenario As ScenarioType
-    Dim blankScenario As ScenarioType
     
     
     If iter = 1 Then
@@ -92,10 +91,10 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
         
         For row = 2 To ultimaLinha
             ' Initialize values from the sheet
-            UpdateScenariosAttributes row, thisScenario
+            thisScenario = InitScenariosAttributes row, thisScenario
         
             ' Process strain criteria
-            Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.StrainCriteria)
+            Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.strainCriteria)
 
             ' Find the highest strain element eligible for PFP (critical element)
             pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria)
@@ -109,9 +108,6 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
             ElseIf pfpEligibleElement.Number = 0 Then
                 shtScriptUsfos.Cells(row, "S") = "completed"
             End If
-
-            ' Reset thisScenario to default values
-            thisScenario = blankScenario
         Next row
 
         ' Create a folder and Copy first Run files
@@ -123,7 +119,7 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
             If Not AuxMacros.IsCompleted(row) Then
                 ' Initialize values from the sheet
                 ' TODO: Change this to a class
-                UpdateScenariosAttributes row, thisScenario
+                thisScenario = InitScenariosAttributes (row)
             
                 ' Extract the load case data from the Beltemp file
                 Set loadCaseData = ExtractLoadCaseData(thisScenario.BeltempFilePath)
@@ -136,15 +132,14 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                 PFPElement = methodOutput(1)
 
                 ' Apply PFP on eligible element
-                If PFPElement<> 0 Then
+                If PFPElement <> 0 Then
                     ' Write PFP element to the script file
                     writePFPElement row, PFPElement
     
                     ' Update Fahts for on going cases
-                    UpdateHeadFahts row
+                    UpdateHeadFahts thisScenario
                     
                     ' Running Fahts
-                    executeProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
                     ExecuteProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
                     
                     ' Copying Fahts files just to check    TODO: Delete after checking
@@ -153,11 +148,11 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     ' Update Completion Status
                     shtScriptUsfos.Cells(row, "S") = "on going"
 
-                ' If PFP Element is 0, then the criteria was met and no other element needs pfp. 
+                ' If PFP Element is 0, then the criteria was met and no other element needs pfp.
                 ' Finally update to the case with highest strain for plotting
                 ElseIf PFPElement = 0 Then
                     ' Update Head USFOS file
-                    UpdateHeadUsfos row, HighestStrainTime
+                    UpdateHeadUsfos thisScenario, HighestStrainTime
 
                     ' Running Usfos
                     ExecuteProgram Program.USFOS, thisScenario.FolderPath, thisScenario.Name
@@ -169,9 +164,6 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                 End If
                 
             End If
-
-            ' Reset thisScenario to default values
-            thisScenario = blankScenario
         Next row
     End If
 
@@ -184,18 +176,20 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     End If
 End Sub
 
-Private Sub UpdateScenariosAttributes(ByVal row As Long, ByRef thisScenario As ScenarioType) 
+Private Function InitScenariosAttributes(ByVal row As Long) As ScenarioType
     ' Update the scenario attributes based on the row values TODO: Change this to a class
     Dim BeltempFilename As String
     Dim scenarioName As String
     Dim caseFolderPath As String
     Dim BeltempFilePath As String
     Dim scenarioAttributes As ScenarioType
+    Dim thisScenario As ScenarioType
 
     ' Initialize and fetch values from the worksheet
+    thisScenario.row = row
     thisScenario.Number = shtScriptFaths.Cells(row, "A")
     thisScenario.Name = shtScriptUsfos.Cells(row, "B")
-    thisScenario.StrainCriteria = shtScriptUsfos.Cells(row, "I")
+    thisScenario.strainCriteria = shtScriptUsfos.Cells(row, "I")
 
     thisScenario.FolderPath = CURRENT_FOLDER & "\" & thisScenario.Number & "_" & thisScenario.Name
     
@@ -204,9 +198,11 @@ Private Sub UpdateScenariosAttributes(ByVal row As Long, ByRef thisScenario As S
 
     thisScenario.FileStrain = thisScenario.FolderPath & "\" & thisScenario.Name & "_strain_output"
     thisScenario.FileStrainNeg = thisScenario.FolderPath & "\" & thisScenario.Name & "_strain_neg_output"
+
+    InitScenariosAttributes = thisScenario
 End Sub
 
-Private Function GetMethodOutputs(ByVal loadCaseData As Collection,ByRef thisScenario As scenarioType,ByVal method As String) As Double
+Private Function GetMethodOutputs(ByVal loadCaseData As Collection, ByRef thisScenario As ScenarioType, ByVal method As String) As Double
     ' Get the load case time based on the desired method
     Dim LoadCaseTime As Double
     
@@ -218,7 +214,7 @@ Private Function GetMethodOutputs(ByVal loadCaseData As Collection,ByRef thisSce
     GetMethodOutputs = MethodsOutput
 End Function
 
-Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef thisScenario As scenarioType) As Double
+Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef thisScenario As ScenarioType) As Double
     ' Get the time of the highest strain element above criteria
     Dim loadCaseTimeDetails As Variant
     Dim loadcase As Long
@@ -242,7 +238,7 @@ Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef this
         LoadCaseTime = loadCaseTimeDetails(1)
 
         ' Update Head USFOS file
-        UpdateHeadUsfos row, LoadCaseTime
+        UpdateHeadUsfos thisScenario, LoadCaseTime
 
         ' Running Usfos
         ExecuteProgram Program.USFOS, thisScenario.FolderPath, thisScenario.Name
@@ -251,22 +247,22 @@ Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef this
         ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
 
         ' Process positive strain criteria
-        Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.StrainCriteria)
+        Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.strainCriteria)
         
         ' Find the highest strain element eligible for PFP (critical element)
         pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria)
 
 
-        if checkStrainNegCriteria = 1 and pfpEligibleElement.Number = 0 then
+        If checkStrainNegCriteria = 1 And pfpEligibleElement.Number = 0 Then
             ' Running straing neg to get values outside criteria
             ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
 
             ' Process negative strain criteria
-            Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrainNeg, thisScenario.StrainCriteria*-1)
+            Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrainNeg, thisScenario.strainCriteria * -1)
 
             ' Find the highest strain element eligible for PFP (critical element)
             pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria)
-        end if
+        End If
         
 
         ' Process strain criteria with 0 to store the highest strain of all
@@ -452,11 +448,9 @@ Private Sub ProcessBucklingCriteria(ByVal iter As Integer)
 End Sub
 
 
-Private Sub UpdateHeadUsfos(ByVal row As Long, ByVal LoadCaseTime As String)
+Private Sub UpdateHeadUsfos(ByRef Scenario As ScenarioType, ByVal LoadCaseTime As String)
     ' Updates the Head USFOS file for each row in the specified range.
     ' TODO: CHange the fucntion to receive the files path and not the row
-    Dim scenarioName As String
-    Dim caseFolderPath As String
     Dim HeadFilename As String
     Dim HeadDefaultFile As String
     Dim HeadCaseFile As String
@@ -464,14 +458,10 @@ Private Sub UpdateHeadUsfos(ByVal row As Long, ByVal LoadCaseTime As String)
     Dim currentLoadCaseTime As Double
     Dim FSObject As Object
 
-    ' Initialize values from the sheet
-    scenarioName = shtScriptUsfos.Cells(row, "B")
-    caseFolderPath = CURRENT_FOLDER & "\" & shtScriptUsfos.Cells(row, "A") & "_" & scenarioName
-
     ' Define the paths to Head and Beltemp files
-    HeadFilename = "usfos_head_" & scenarioName
+    HeadFilename = "usfos_head_" & Scenario.Name
     HeadDefaultFile = CURRENT_FOLDER & HEAD_DEFAULT_FILE
-    HeadCaseFile = caseFolderPath & "\" & HeadFilename & ".fem"
+    HeadCaseFile = Scenario.FolderPath & "\" & HeadFilename & ".fem"
     
     ' Copy and modify head file
     Set FSObject = CreateObject("Scripting.FileSystemObject")
@@ -536,9 +526,10 @@ Private Sub CopyCaseFile(ByVal sourcePath As String, ByVal destinationPath As St
 End Sub
 
 
-Private Sub ExecuteShellCommand(ByVal command As String) As Variant
-    On Error GoTo ErrorHandler
-
+Private Sub ExecuteShellCommand(ByVal command As String)
+    'On Error GoTo ErrorHandler
+    ' Todo: Check if error handler is necessayr
+    
     Dim shellObject As Object
     Set shellObject = CreateObject("WScript.Shell")
     Dim ShellCommand As Variant
@@ -546,10 +537,11 @@ Private Sub ExecuteShellCommand(ByVal command As String) As Variant
     ' Execute the command
     ShellCommand = shellObject.Run(command, 1, True)
 
-    Exit Sub
+    'Exit Sub
 
-ErrorHandler:
-    MsgBox "An error occurred: " & Err.Description
+'ErrorHandler:
+    'MsgBox "An error occurred: " & Err.Description
+    'End
 End Sub
 
 Private Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory As String, ByVal scenarioName As String)
@@ -592,7 +584,7 @@ Private Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory 
 
     Dim fullCommand As String
     fullCommand = """" & executable & """" & executionCommand & outputFileName & " < " & inputFileName
-    Debug.Print (fullCommand)
+    
     ExecuteShellCommandHidden fullCommand, workingDirectory
 End Sub
 
@@ -686,16 +678,15 @@ Private Sub ModifyHeadFile(ByVal HeadFile As String, ByVal LoadCaseTime As Doubl
     Close #HeadFileHandle
 End Sub
 
-Sub UpdateHeadFahts(ByVal row As Long)
-    Dim scenarioName As String
-    Dim caseFolderPath As String
+Sub UpdateHeadFahts(ByRef Scenario As ScenarioType)
     Dim HeadFahtsPath As String
+    Dim row As Long
 
-    scenarioName = shtScriptUsfos.Cells(row, "B")
-    caseFolderPath = CURRENT_FOLDER & "\" & shtScriptUsfos.Cells(row, "A") & "_" & scenarioName
-    
-    HeadFahtsPath = caseFolderPath & "\head_" & scenarioName & ".fem"
+    row = Scenario.row
+    HeadFahtsPath = Scenario.FolderPath & "\head_" & Scenario.Name & ".fem"
 
+    ' TODO:
+    ' Updating Element with PFP TODO: update this to be updated for scenario
     shtScriptUsfos.Cells(row, "L") = shtScriptUsfos.Cells(row, "J") & vbCrLf & shtScriptUsfos.Cells(row, "K")
 
     HeadFahtsHandle = FreeFile
@@ -850,7 +841,7 @@ Sub CopyStatusFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal it
         On Error GoTo 0
     End If
 
-    ' Copy the status files to the directory 
+    ' Copy the status files to the directory
 
     SourceFilePath = caseFolderPath & "\" & scenarioName & "_usfos_output_status.text"
     DestinationFilePath = StatusFoldePath & "\" & scenarioName & "_usfos_output_status_" & "iter_" & iter & _
@@ -884,3 +875,4 @@ Sub CopyFahtsOutFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal 
     Set FSObject = CreateObject("Scripting.FileSystemObject")
     FSObject.CopyFile SourceFilePath, DestinationFilePath, True
 End Sub
+
