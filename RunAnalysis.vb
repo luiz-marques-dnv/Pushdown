@@ -10,7 +10,7 @@ Type ScenarioType
     FileStrain As String
     FileStrainNeg As String
     strainCriteria As Double
-    row as Long
+    row As Long
 End Type
 
 Sub Run_analysis()
@@ -71,7 +71,7 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     Dim ElementsAboveCriteria As Scripting.Dictionary
     Dim pfpEligibleElement As ElementType
     Dim HighestStrainTime As Double
-    Dim methodOutput As Variant
+    Dim methodOutput() As Variant
     Dim PFPElement As Long
     Dim thisScenario As ScenarioType
     
@@ -91,7 +91,7 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
         
         For row = 2 To ultimaLinha
             ' Initialize values from the sheet
-            thisScenario = InitScenariosAttributes row, thisScenario
+            thisScenario = InitScenariosAttributes(row)
         
             ' Process strain criteria
             Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.strainCriteria)
@@ -119,13 +119,13 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
             If Not AuxMacros.IsCompleted(row) Then
                 ' Initialize values from the sheet
                 ' TODO: Change this to a class
-                thisScenario = InitScenariosAttributes (row)
+                thisScenario = InitScenariosAttributes(row)
             
                 ' Extract the load case data from the Beltemp file
                 Set loadCaseData = ExtractLoadCaseData(thisScenario.BeltempFilePath)
                 
                 ' Get desired load case time based on desired method
-                methodOutput = GetMethodOutputs(loadCaseData, thisScenario, "HighestTrainMethod")
+                methodOutput = GetMethodOutputs(loadCaseData, thisScenario, "HighestStrainMethod")
 
                 ' Getting outputs depending on method
                 HighestStrainTime = methodOutput(0)
@@ -155,7 +155,7 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
                     UpdateHeadUsfos thisScenario, HighestStrainTime
 
                     ' Running Usfos
-                    ExecuteProgram Program.USFOS, thisScenario.FolderPath, thisScenario.Name
+                    ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
                     
                     ' Running strain and Straing neg to get values outside criteria
                     ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
@@ -176,7 +176,7 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
     End If
 End Sub
 
-Private Function InitScenariosAttributes(ByVal row As Long) As ScenarioType
+Function InitScenariosAttributes(ByVal row As Long) As ScenarioType
     ' Update the scenario attributes based on the row values TODO: Change this to a class
     Dim BeltempFilename As String
     Dim scenarioName As String
@@ -187,7 +187,7 @@ Private Function InitScenariosAttributes(ByVal row As Long) As ScenarioType
 
     ' Initialize and fetch values from the worksheet
     thisScenario.row = row
-    thisScenario.Number = shtScriptFaths.Cells(row, "A")
+    thisScenario.Number = shtScriptUsfos.Cells(row, "A")
     thisScenario.Name = shtScriptUsfos.Cells(row, "B")
     thisScenario.strainCriteria = shtScriptUsfos.Cells(row, "I")
 
@@ -200,21 +200,20 @@ Private Function InitScenariosAttributes(ByVal row As Long) As ScenarioType
     thisScenario.FileStrainNeg = thisScenario.FolderPath & "\" & thisScenario.Name & "_strain_neg_output"
 
     InitScenariosAttributes = thisScenario
-End Sub
+End Function
 
-Private Function GetMethodOutputs(ByVal loadCaseData As Collection, ByRef thisScenario As ScenarioType, ByVal method As String) As Double
+Private Function GetMethodOutputs(ByVal loadCaseData As Collection, ByRef thisScenario As ScenarioType, ByVal method As String) As Variant()
     ' Get the load case time based on the desired method
-    Dim LoadCaseTime As Double
     
     Select Case method
-        Case "HighestTrainMethod"
-            MethodsOutput = HighestTrainMethod(loadCaseData, thisScenario)
+        Case "HighestStrainMethod"
+            MethodsOutput = HighestStrainMethod(loadCaseData, thisScenario)
     End Select
     
     GetMethodOutputs = MethodsOutput
 End Function
 
-Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef thisScenario As ScenarioType) As Double
+Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thisScenario As ScenarioType) As Variant()
     ' Get the time of the highest strain element above criteria
     Dim loadCaseTimeDetails As Variant
     Dim loadcase As Long
@@ -241,7 +240,7 @@ Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef this
         UpdateHeadUsfos thisScenario, LoadCaseTime
 
         ' Running Usfos
-        ExecuteProgram Program.USFOS, thisScenario.FolderPath, thisScenario.Name
+        ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
 
         ' Running strain to get values outside criteria
         ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
@@ -300,11 +299,11 @@ Private Function HighestTrainMethod(ByVal loadCaseData As Collection, ByRef this
         pfpEligibleElement = blankElement
     Next loadCaseTimeDetails
     
-    HighestTrainMethod = Array(HighestStrainTime, HighestElementStrain)
+    HighestStrainMethod = Array(HighestStrainTime, HighestElementStrain)
 End Function
 
 
-Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strainCriteria) As Scripting.Dictionary
+Private Function GetElementsAboveCriteriaStrain(ByVal FilePath As String, strainCriteria) As Scripting.Dictionary
     ' Process the strain file (either positive or negative) and returns a dinamic array of elements with number and strain that have a strain above the criteria
     ' It will overwrites the array if high loadcase is found
     
@@ -318,7 +317,7 @@ Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strain
 
     strainFile = FreeFile
     
-    Open filePath For Input As #strainFile
+    Open FilePath For Input As #strainFile
     Do Until EOF(strainFile)
         Line Input #strainFile, lineFromFile
 
@@ -433,7 +432,7 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
             For k = 2 To ultlinhaPFP3Sided + 1
                 If PFPElementNumber = shtPFP3sided.Cells(k, (row - 2) * 5 + 3) Then
                     verify = False
-                    MsgBox ("Elemento 3-sided já protegido. Tente colocar como 4 sided")
+                    MsgBox ("Elemento " & PFPElementNumber & " 3-sided já protegido. Tente colocar como 4 sided")
                 End If
             Next
             If verify = True Then
@@ -458,6 +457,7 @@ Private Sub UpdateHeadUsfos(ByRef Scenario As ScenarioType, ByVal LoadCaseTime A
     Dim currentLoadCaseTime As Double
     Dim FSObject As Object
 
+    
     ' Define the paths to Head and Beltemp files
     HeadFilename = "usfos_head_" & Scenario.Name
     HeadDefaultFile = CURRENT_FOLDER & HEAD_DEFAULT_FILE
@@ -544,22 +544,28 @@ Private Sub ExecuteShellCommand(ByVal command As String)
     'End
 End Sub
 
-Private Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory As String, ByVal scenarioName As String)
+Private Sub ExecuteProgramBackup(ByVal programName As Program, ByVal workingDirectory As String, ByVal scenarioName As String)
     Dim executable As String
     Dim outputFileName As String
     Dim inputFileName As String
     Dim usfosBin As String
+    Dim fullCommand As String
+    Dim startTime As Double
+    Dim endTime As Double
+    Dim executionTime As Double
+    Dim minimumExpectedTime As Double
+        
+    minimumExpectedTime = 3 ' Set this to the minimum expected execution time in seconds
     
-
     usfosBin = shtScriptUsfos.Range("W1")
-    FahtsExe = shtScriptUsfos.Range("W2")
+    fahtsExe = shtScriptUsfos.Range("W2")
 
     Select Case programName
         Case Program.FAHTS
-            executable = FahtsExe
+            executable = fahtsExe
             inputFileName = "input.inp"
 
-        Case Program.USFOS
+        Case Program.Usfos
             executable = usfosBin & "\Usfos.exe"
             executionCommand = " 400 > "
             outputFileName = scenarioName & "_usfos.trm"
@@ -582,17 +588,107 @@ Private Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory 
             Exit Sub
     End Select
 
-    Dim fullCommand As String
+    
     fullCommand = """" & executable & """" & executionCommand & outputFileName & " < " & inputFileName
     
+    ' Get the start time
+    startTime = Timer
+    
     ExecuteShellCommandHidden fullCommand, workingDirectory
+    
+    ' Get the end time
+    endTime = Timer
+
+    ' Calculate the execution time
+    executionTime = endTime - startTime
+
+    ' Check if the execution time is below the minimum expected time
+    If executionTime < minimumExpectedTime Then
+        MsgBox "Warning: The executable '" & executable & "' closed too quickly. This might indicate a problem." & vbNewLine & _
+               vbNewLine & "Details:" & vbNewLine & _
+               "Working Directory: " & workingDirectory & vbNewLine & _
+               "Scenario Name: " & scenarioName & vbNewLine & _
+               vbNewLine & "Tip: Check for program license or path issues."
+    End If
+
+    
 End Sub
+Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory As String, ByVal scenarioName As String)
+    Dim executable As String
+    Dim outputFileName As String
+    Dim inputFileName As String
+    Dim usfosBin As String
+    Dim fullCommand As String
+    Dim PreviousTimestamp As String
+    Dim outputCheck As String
+    Dim OutputCheckPath As String
+    Dim HasFileChanged1 As Boolean
+        
 
+    
+    usfosBin = shtScriptUsfos.Range("W1")
+    fahtsExe = shtScriptUsfos.Range("W2")
 
-Private Function ExecuteShellCommandHidden(ByVal command As String, workingDirectory As String) As Variant
-    On Error GoTo ErrorHandler
+    Select Case programName
+        Case Program.FAHTS
+            executable = fahtsExe
+            inputFileName = "input.inp"
+            outputCheck = scenarioName & "_output_beltemp.fem"
+
+        Case Program.Usfos
+            executable = usfosBin & "\Usfos.exe"
+            executionCommand = " 400 > "
+            outputFileName = scenarioName & "_usfos.trm"
+            inputFileName = "usfos_input.inp"
+            outputCheck = outputFileName
+
+        Case Program.Strain
+            executable = usfosBin & "\strain.exe"
+            executionCommand = " 400 > "
+            outputFileName = scenarioName & "_strain.trm"
+            inputFileName = "strain_input.inp"
+            outputCheck = outputFileName
+
+        Case Program.SRAINNeg
+            executable = usfosBin & "\strain_neg.exe"
+            executionCommand = " 400 > "
+            outputFileName = scenarioName & "_strain_neg.trm"
+            inputFileName = "strain_neg_input.inp"
+            outputCheck = outputFileName
+
+        Case Else
+            MsgBox "Invalid Program Name when calling ExecuteProgram sub"
+            Exit Sub
+    End Select
+
+    
+    fullCommand = """" & executable & """" & executionCommand & outputFileName & " < " & inputFileName
+    
+    OutputCheckPath = workingDirectory & "\" & outputCheck
+    
+    ' Get the timestamp before running the program
+    PreviousTimestamp = ScriptsHandling.GetFileLastModified(OutputCheckPath)
+    
+    ExecuteShellCommandHidden fullCommand, workingDirectory
+    
+    HasFileChanged1 = HasFileChanged(OutputCheckPath, PreviousTimestamp)
+
+    ' Check if the execution time is below the minimum expected time
+    If Not HasFileChanged1 Then
+        MsgBox "Warning: The " & OutputCheckPath & " was not updated." & vbNewLine & _
+               vbNewLine & "Details:" & vbNewLine & _
+               "Working Directory: " & workingDirectory & vbNewLine & _
+               "Scenario Name: " & scenarioName & vbNewLine & _
+               vbNewLine & "Tip: Check for program license or path issues."
+    End If
+
+    
+End Sub
+Private Sub ExecuteShellCommandHidden(ByVal command As String, workingDirectory As String)
+    'On Error GoTo ErrorHandler
 
     Dim shellObject As Object
+    Dim ExecuteShellCommandHidden As Variant
     Set shellObject = CreateObject("WScript.Shell")
 
     ' Construct the command with proper quoting
@@ -605,12 +701,12 @@ Private Function ExecuteShellCommandHidden(ByVal command As String, workingDirec
     ' Execute the command
     ExecuteShellCommandHidden = shellObject.Run(fullCommand, 7, True)
 
-    Exit Function
+    Exit Sub
 
-ErrorHandler:
+'ErrorHandler:
     MsgBox "An error occurred: " & Err.Description
     ExecuteShellCommandHidden = Nothing
-End Function
+End Sub
 
 
 Private Function ExtractLoadCaseData(ByVal BeltempFilePath As String) As Collection
@@ -680,18 +776,16 @@ End Sub
 
 Sub UpdateHeadFahts(ByRef Scenario As ScenarioType)
     Dim HeadFahtsPath As String
-    Dim row As Long
 
-    row = Scenario.row
+    
+    
     HeadFahtsPath = Scenario.FolderPath & "\head_" & Scenario.Name & ".fem"
 
-    ' TODO:
-    ' Updating Element with PFP TODO: update this to be updated for scenario
-    shtScriptUsfos.Cells(row, "L") = shtScriptUsfos.Cells(row, "J") & vbCrLf & shtScriptUsfos.Cells(row, "K")
+    shtScriptUsfos.Cells(Scenario.row, "L") = shtScriptUsfos.Cells(Scenario.row, "J") & vbCrLf & shtScriptUsfos.Cells(Scenario.row, "K")
 
     HeadFahtsHandle = FreeFile
     Open HeadFahtsPath For Output As #HeadFahtsHandle
-    WriteHeadFileContent HeadFahtsHandle, row
+    WriteHeadFileContent HeadFahtsHandle, Scenario.row
     Close #HeadFahtsHandle
 
 End Sub
@@ -876,3 +970,26 @@ Sub CopyFahtsOutFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal 
     FSObject.CopyFile SourceFilePath, DestinationFilePath, True
 End Sub
 
+Sub run_fahts_on_going()
+    Dim row As Long
+    Dim ultimaLinha As Long
+    Dim thisScenario As ScenarioType
+    
+    ultimaLinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
+    
+    AuxMacros.setCurrentFolder
+    
+    For row = 2 To ultimaLinha
+        If shtScriptUsfos.Cells(row, "S") = "on going" Then
+            thisScenario = InitScenariosAttributes(row)
+
+            ' Update Fahts for on going cases
+            UpdateHeadFahts thisScenario
+                    
+            ' Running Fahts
+            ExecuteProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
+
+        End If
+    Next
+
+End Sub
