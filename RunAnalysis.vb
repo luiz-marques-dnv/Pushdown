@@ -17,6 +17,7 @@ Sub Run_analysis()
     ' Initialization
     Dim ultimaLinha As Long
     Dim iter As Long
+    Dim row As Long
     
     ' Sub to Disable calculations and screen updating
     TurnOnCalcs
@@ -32,17 +33,21 @@ Sub Run_analysis()
 
     checkStrainNegCriteria = shtScriptUsfos.Range("W32").Value
 
-    iter = InitializeIteration()
+    
     
     ' Main processing loop
-    Do Until CriteriaMet(iter)
-        iter = iter + 1
-       
-        ProcessIteration iter, ultimaLinha
+    For row = 2 To ultimaLinha
+        Do Until CriteriaMet(iter, row)
+            ' Retrieve iteration number in the worksheet
+            iter = shtScriptUsfos.Cells(row, "D")
+            iter = iter + 1
         
-         ' Update iteration number in the worksheet
-        shtScriptUsfos.Cells(17, 23) = iter
-    Loop
+            ProcessIteration iter, row
+            
+            ' Update iteration number in the worksheet
+            shtScriptUsfos.Cells(row, "D") = iter
+        Loop
+    Next row
 
     ' Finalization
     MsgBox "Usfos/Faths Analysis Finished!"
@@ -51,8 +56,9 @@ Sub Run_analysis()
     TurnOnCalcs
 End Sub
 
-Private Function InitializeIteration() As Integer
-    If shtScriptUsfos.Cells(17, 23) = "" Then
+Private Function InitializeIteration(row) As Integer
+    Set iterationCell = shtScriptUsfos.Cells(row, "D")
+    If iterationCell = "" Then
         InitializeIteration = 0
         
     Else
@@ -61,8 +67,7 @@ Private Function InitializeIteration() As Integer
     
 End Function
 
-Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
-    Dim row As Long
+Private Sub ProcessIteration(iter As Long, row As Long)
     Dim loadCaseData As Collection
     Dim shellCommandUsfos As String
     Dim shellCommandStrain As String
@@ -89,91 +94,85 @@ Private Sub ProcessIteration(iter As Long, ultimaLinha As Long)
         ExecuteShellCommand shellCommandStrain
         ExecuteShellCommand shellCommandStrainNeg
         
-        For row = 2 To ultimaLinha
-            ' Initialize values from the sheet
-            thisScenario = InitScenariosAttributes(row)
         
-            ' Process strain criteria
-            Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.strainCriteria)
+        ' Initialize values from the sheet
+        thisScenario = InitScenariosAttributes(row)
+    
+        ' Process strain criteria
+        Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.strainCriteria)
 
-            ' Find the highest strain element eligible for PFP (critical element)
-            pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria)
-    
-            ' TODO: hange thi condition handling
-            If pfpEligibleElement.Number <> 0 Then
-                ' Update Completion Status
-                shtScriptUsfos.Cells(row, "S") = "on going"
-            
-    
-            ElseIf pfpEligibleElement.Number = 0 Then
-                shtScriptUsfos.Cells(row, "S") = "completed"
-            End If
-        Next row
+        ' Find the highest strain element eligible for PFP (critical element)
+        pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria)
+
+        ' TODO: hange thi condition handling
+        If pfpEligibleElement.Number <> 0 Then
+            ' Update Completion Status
+            shtScriptUsfos.Cells(row, "S") = "on going"
+        
+
+        ElseIf pfpEligibleElement.Number = 0 Then
+            shtScriptUsfos.Cells(row, "S") = "completed"
+        End If
 
         ' Create a folder and Copy first Run files
         CopyFirstRunFiles ultimaLinha
     
         
     ElseIf iter > 1 Then
-        For row = 2 To ultimaLinha
-            If Not AuxMacros.IsCompleted(row) Then
-                ' Initialize values from the sheet
-                ' TODO: Change this to a class
-                thisScenario = InitScenariosAttributes(row)
+        
+        If Not AuxMacros.IsCompleted(row) Then
+            ' Initialize values from the sheet
+            ' TODO: Change this to a class
+            thisScenario = InitScenariosAttributes(row)
+        
+            ' Extract the load case data from the Beltemp file
+            Set loadCaseData = ExtractLoadCaseData(thisScenario.BeltempFilePath)
             
-                ' Extract the load case data from the Beltemp file
-                Set loadCaseData = ExtractLoadCaseData(thisScenario.BeltempFilePath)
+            ' Get desired load case time based on desired method
+            methodOutput = GetMethodOutputs(loadCaseData, thisScenario, "HighestStrainMethod")
+
+            ' Getting outputs depending on method
+            HighestStrainTime = methodOutput(0)
+            PFPElement = methodOutput(1)
+
+            ' Apply PFP on eligible element
+            If PFPElement <> 0 Then
+                ' Write PFP element to the script file
+                writePFPElement row, PFPElement
+
+                ' Update Fahts for on going cases
+                UpdateHeadFahts thisScenario
                 
-                ' Get desired load case time based on desired method
-                methodOutput = GetMethodOutputs(loadCaseData, thisScenario, "HighestStrainMethod")
-
-                ' Getting outputs depending on method
-                HighestStrainTime = methodOutput(0)
-                PFPElement = methodOutput(1)
-
-                ' Apply PFP on eligible element
-                If PFPElement <> 0 Then
-                    ' Write PFP element to the script file
-                    writePFPElement row, PFPElement
-    
-                    ' Update Fahts for on going cases
-                    UpdateHeadFahts thisScenario
-                    
-                    ' Running Fahts
-                    ExecuteProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
-                    
-                    ' Copying Fahts files just to check    TODO: Delete after checking
-                    CopyFahtsOutFiles thisScenario.Name, thisScenario.FolderPath, iter
-
-                    ' Update Completion Status
-                    shtScriptUsfos.Cells(row, "S") = "on going"
-
-                ' If PFP Element is 0, then the criteria was met and no other element needs pfp.
-                ' Finally update to the case with highest strain for plotting
-                ElseIf PFPElement = 0 Then
-                    ' Update Head USFOS file
-                    UpdateHeadUsfos thisScenario, HighestStrainTime
-
-                    ' Running Usfos
-                    ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
-                    
-                    ' Running strain and Straing neg to get values outside criteria
-                    ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
-                    
-                    shtScriptUsfos.Cells(row, "S") = "completed"
-                End If
+                ' Running Fahts
+                ExecuteProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
                 
+                ' Copying Fahts files just to check    TODO: Delete after checking
+                CopyFahtsOutFiles thisScenario.Name, thisScenario.FolderPath, iter
+
+                ' Update Completion Status
+                shtScriptUsfos.Cells(row, "S") = "on going"
+
+            ' If PFP Element is 0, then the criteria was met and no other element needs pfp.
+            ' Finally update to the case with highest strain for plotting
+            ElseIf PFPElement = 0 Then
+                ' Update Head USFOS file
+                UpdateHeadUsfos thisScenario, HighestStrainTime
+
+                ' Running Usfos
+                ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
+                
+                ' Running strain and Straing neg to get values outside criteria
+                ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
+                
+                shtScriptUsfos.Cells(row, "S") = "completed"
             End If
-        Next row
+            
+        End If
+        
     End If
 
     ' Verify and update criteria
     VerifyAndUpdateCriteria iter
-
-    ' Run Faths if criteria not met
-    If Not CriteriaMet(iter) Then
-        'UpdateAndRunFahts iter
-    End If
 End Sub
 
 Function InitScenariosAttributes(ByVal row As Long) As ScenarioType
@@ -613,48 +612,51 @@ Private Sub ExecuteProgramBackup(ByVal programName As Program, ByVal workingDire
 
     
 End Sub
-Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory As String, ByVal scenarioName As String)
+Sub ExecuteProgram(ByVal prog As Program, ByVal workingDirectory As String, ByVal scenarioName As String)
     Dim executable As String
     Dim outputFileName As String
     Dim inputFileName As String
     Dim usfosBin As String
     Dim fullCommand As String
     Dim PreviousTimestamp As String
-    Dim outputCheck As String
+    Dim trmFileName As String
     Dim OutputCheckPath As String
     Dim HasFileChanged1 As Boolean
         
 
-    
     usfosBin = shtScriptUsfos.Range("W1")
     fahtsExe = shtScriptUsfos.Range("W2")
 
-    Select Case programName
+    Select Case prog
         Case Program.FAHTS
             executable = fahtsExe
             inputFileName = "input.inp"
             outputCheck = scenarioName & "_output_beltemp.fem"
+            programName = "FAHTS"
 
         Case Program.Usfos
             executable = usfosBin & "\Usfos.exe"
             executionCommand = " 400 > "
-            outputFileName = scenarioName & "_usfos.trm"
+            trmFileName = scenarioName & "_usfos.trm"
             inputFileName = "usfos_input.inp"
-            outputCheck = outputFileName
+            outputFileName = scenarioName & "_usfos_output.out"
+            programName = "USFOS"
 
         Case Program.Strain
             executable = usfosBin & "\strain.exe"
             executionCommand = " 400 > "
-            outputFileName = scenarioName & "_strain.trm"
+            trmFileName = scenarioName & "_strain.trm"
             inputFileName = "strain_input.inp"
-            outputCheck = outputFileName
+            outputFileName = scenarioName & "_strain_output"
+            programName = "STRAIN"
 
         Case Program.SRAINNeg
             executable = usfosBin & "\strain_neg.exe"
             executionCommand = " 400 > "
-            outputFileName = scenarioName & "_strain_neg.trm"
+            trmFileName = scenarioName & "_strain_neg.trm"
             inputFileName = "strain_neg_input.inp"
-            outputCheck = outputFileName
+            outputFileName = scenarioName & "_strain_neg_output"
+            programName = "STRAIN NEG"
 
         Case Else
             MsgBox "Invalid Program Name when calling ExecuteProgram sub"
@@ -662,9 +664,10 @@ Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory As Strin
     End Select
 
     
-    fullCommand = """" & executable & """" & executionCommand & outputFileName & " < " & inputFileName
+    fullCommand = """" & executable & """" & executionCommand & trmFileName & " < " & inputFileName
     
-    OutputCheckPath = workingDirectory & "\" & outputCheck
+    ' File path used for checking if the program run as expected
+    OutputCheckPath = workingDirectory & "\" & outputFileName
     
     ' Get the timestamp before running the program
     PreviousTimestamp = ScriptsHandling.GetFileLastModified(OutputCheckPath)
@@ -673,13 +676,13 @@ Sub ExecuteProgram(ByVal programName As Program, ByVal workingDirectory As Strin
     
     HasFileChanged1 = HasFileChanged(OutputCheckPath, PreviousTimestamp)
 
-    ' Check if the execution time is below the minimum expected time
+    ' Check if the file has changed. If it has, the program ran as expected
     If Not HasFileChanged1 Then
-        MsgBox "Warning: The " & OutputCheckPath & " was not updated." & vbNewLine & _
-               vbNewLine & "Details:" & vbNewLine & _
-               "Working Directory: " & workingDirectory & vbNewLine & _
-               "Scenario Name: " & scenarioName & vbNewLine & _
-               vbNewLine & "Tip: Check for program license or path issues."
+        MsgBox "Warning: The " & OutputCheckPath & " file was not updated." & _
+                vbNewLine & vbNewLine & _
+                "This means that " & programName & " did not ran as expected" & _
+                vbNewLine & vbNewLine & _
+               "Tip: Check for program license or path issues."
     End If
 
     
@@ -883,7 +886,7 @@ Private Sub VerifyAndUpdateCriteria(ByVal iter As Integer)
 End Sub
 
 
-Private Function CriteriaMet(iter) As Boolean
+Private Function CriteriaMet(ByRef iter As Long, row As Long) As Boolean
     ' Determine if the criteria are met
     ' Return True if criteria are met, False otherwise
     
@@ -892,8 +895,9 @@ Private Function CriteriaMet(iter) As Boolean
     If iter > 0 And screening Then CriteriaMet = True
     
     If iter = 100 Then CriteriaMet = True
-    
-    
+
+    If shtScriptUsfos.Cells(row, "S") = "completed" Then CriteriaMet = True
+        
 End Function
 
 Sub CopyStrainFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal iter As Long, loadcase As Long)
@@ -993,3 +997,5 @@ Sub run_fahts_on_going()
     Next
 
 End Sub
+
+
