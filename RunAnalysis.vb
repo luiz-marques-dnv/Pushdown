@@ -32,8 +32,6 @@ Sub Run_analysis()
     ultimaLinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
 
     checkStrainNegCriteria = shtScriptUsfos.Range("W32").Value
-
-    
     
     ' Main processing loop
     For row = 2 To ultimaLinha
@@ -74,7 +72,7 @@ Private Sub ProcessIteration(iter As Long, row As Long)
     Dim shellCommandStrainNeg As String
     Dim strainCriteria As Double
     Dim ElementsAboveCriteria As Scripting.Dictionary
-    Dim pfpEligibleElement As ElementType
+    Dim pfpEligibleElement As elementType
     Dim HighestStrainTime As Double
     Dim methodOutput() As Variant
     Dim PFPElement As Long
@@ -183,7 +181,10 @@ Function InitScenariosAttributes(ByVal row As Long) As ScenarioType
     Dim BeltempFilePath As String
     Dim scenarioAttributes As ScenarioType
     Dim thisScenario As ScenarioType
-
+    
+    ' Set the current folder
+    AuxMacros.setCurrentFolder
+    
     ' Initialize and fetch values from the worksheet
     thisScenario.row = row
     thisScenario.Number = shtScriptUsfos.Cells(row, "A")
@@ -224,8 +225,8 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
     Dim HighestStrainCriteria As Double
     Dim ElementsAboveCriteria As Scripting.Dictionary
     Dim ElementsAbove0Criteria As Scripting.Dictionary
-    Dim pfpEligibleElement As ElementType
-    Dim blankElement As ElementType
+    Dim pfpEligibleElement As elementType
+    Dim blankElement As elementType
     
     HighestStrain = 0
     HighestElementStrain = 0
@@ -302,7 +303,7 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
 End Function
 
 
-Private Function GetElementsAboveCriteriaStrain(ByVal FilePath As String, strainCriteria) As Scripting.Dictionary
+Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strainCriteria) As Scripting.Dictionary
     ' Process the strain file (either positive or negative) and returns a dinamic array of elements with number and strain that have a strain above the criteria
     ' It will overwrites the array if high loadcase is found
     
@@ -316,7 +317,7 @@ Private Function GetElementsAboveCriteriaStrain(ByVal FilePath As String, strain
 
     strainFile = FreeFile
     
-    Open FilePath For Input As #strainFile
+    Open filePath For Input As #strainFile
     Do Until EOF(strainFile)
         Line Input #strainFile, lineFromFile
 
@@ -329,10 +330,10 @@ Private Function GetElementsAboveCriteriaStrain(ByVal FilePath As String, strain
             While Len(Trim(lineFromFile)) <> 0
                 elementLine = WorksheetFunction.Trim(lineFromFile)             ' removing extra spaces to avoid errors
                 elementLine_Array = Split(elementLine, " ")                    ' the array should be: Element No, Strain, %
-                ElementNumber = elementLine_Array(0)
+                elementNumber = elementLine_Array(0)
                 ElementStrain = elementLine_Array(1)
                 If Abs(ElementStrain) >= Abs(strainCriteria) Then
-                    elementsStrain.Add ElementNumber, ElementStrain
+                    elementsStrain.Add elementNumber, ElementStrain
                 End If
                 Line Input #strainFile, lineFromFile
             Wend
@@ -353,10 +354,10 @@ Private Sub UpdateCompletionStatus(ByVal row As Long, ByVal PFPElement As Long)
     End If
 End Sub
 
-Private Function FindPFPEligibleElement(ByRef elementsStrain As Scripting.Dictionary) As ElementType
+Private Function FindPFPEligibleElement(ByRef elementsStrain As Scripting.Dictionary) As elementType
     'Verificar se elemento é elegível para receber PFP e retorna o numero do elemento elegível
     Dim test_strain As Long
-    Dim element As ElementType
+    Dim element As elementType
     Dim i As Long
     
     If elementsStrain.Count > 0 Then
@@ -383,50 +384,72 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
     Dim test_3sided_box As String
 
    If PFPElementNumber <> 0 Then
-        shtScriptUsfos.Cells(row, "T") = "El. " & PFPElementNumber & " above criteria"
-        ultlinhaPFP = shtPFP.Cells(Rows.Count, (row - 2) * 5 + 3).End(xlUp).row
+        writeAllElement row, PFPElementNumber
+
+        writeI3SidedElement row, PFPElementNumber
+
+        writeBox3SidedElement row, PFPElementNumber
+    End If
+End Sub
+
+Sub writeAllElement(ByVal row As Long, ByVal PFPElementNumber As Long)
+    Dim ultlinhaPFP As Long
+    Dim verify As Boolean
+    Dim k As Long
+    
+
+    shtScriptUsfos.Cells(row, "T") = "El. " & PFPElementNumber & " above criteria"
+    ultlinhaPFP = shtPFP.Cells(Rows.Count, (row - 2) * 5 + 3).End(xlUp).row
+    verify = True
+    For k = 2 To ultlinhaPFP + 1
+        If PFPElementNumber = shtPFP.Cells(k, (row - 2) * 5 + 3) Then
+            verify = False
+        End If
+    Next
+    If verify = True Then
+        shtScriptUsfos.Cells(row, "J") = shtScriptUsfos.Cells(row, "J") & Chr(10) & "ELMINSUL 1   " & PFPElementNumber
+        shtPFP.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 1) = "ELMINSUL"
+        shtPFP.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 2) = "1"
+        shtPFP.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = PFPElementNumber
+
+    End If
+End Sub
+
+Sub writeI3SidedElement(ByVal row As Long, ByVal PFPElementNumber As Long)
+    Dim ultlinhaPFP3Sided As Long
+    Dim verify As Boolean
+    Dim k As Long
+    Dim test_3sided_I As String
+
+    'Verificar se elemento é elegível para receber PFP 3-sided I profile
+    On Error Resume Next
+    test_3sided_I = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(PFPElementNumber, shtGenie.Range("C2:C50000"), 1, False), "N")
+
+    If Err = 0 Then
+        shtScriptUsfos.Cells(row, "M") = shtScriptUsfos.Cells(row, "M") & "     " & test_3sided_I
+        ultlinhaPFP3Sided = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 3).End(xlUp).row
         verify = True
-        For k = 2 To ultlinhaPFP + 1
-            If PFPElementNumber = shtPFP.Cells(k, (row - 2) * 5 + 3) Then
+        For k = 2 To ultlinhaPFP3Sided + 1
+            If PFPElementNumber = shtPFP3sided.Cells(k, (row - 2) * 5 + 3) Then
                 verify = False
+                MsgBox ("Elemento 3-sided já protegido. Tente colocar como 4 sided")
             End If
         Next
+
         If verify = True Then
-            shtScriptUsfos.Cells(row, "J") = shtScriptUsfos.Cells(row, "J") & Chr(10) & "ELMINSUL 1   " & PFPElementNumber
-            shtPFP.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 1) = "ELMINSUL"
-            shtPFP.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 2) = "1"
-            shtPFP.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = PFPElementNumber
-
+            shtPFP3sided.Cells(ultlinhaPFP3Sided + 1, (row - 2) * 5 + 3) = test_3sided_I
         End If
+    End If
+End Sub
 
-        'Verificar se elemento é elegível para receber PFP 3-sided I profile
-        On Error Resume Next
-        test_3sided_I = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(PFPElementNumber, shtGenie.Range("C2:C50000"), 1, False), "N")
-
-        If Err = 0 Then
-            shtScriptUsfos.Cells(row, "M") = shtScriptUsfos.Cells(row, "M") & "     " & test_3sided_I
-            ultlinhaPFP3Sided = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 1).End(xlUp).row
-            verify = True
-            For k = 2 To ultlinhaPFP3Sided + 1
-                If PFPElementNumber = shtPFP3sided.Cells(k, (row - 2) * 5 + 3) Then
-                    verify = False
-                    MsgBox ("Elemento 3-sided já protegido. Tente colocar como 4 sided")
-                End If
-            Next
-
-            If verify = True Then
-                shtPFP3sided.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = test_3sided_I
-            End If
-        End If
-        
-        
-        'Verificar se elemento é elegível para receber PFP 3-sided box profile
+Sub writeBox3SidedElement(ByVal row As Long, ByVal PFPElementNumber As Long)
+    'Verificar se elemento é elegível para receber PFP 3-sided box profile
         On Error Resume Next
         test_3sided_box = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(PFPElementNumber, shtGenie.Range("D2:D50000"), 1, False), "N")
 
         If Err = 0 Then
             shtScriptUsfos.Cells(row, "N") = shtScriptUsfos.Cells(row, "N") & "     " & test_3sided_box
-            ultlinhaPFP3Sided = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 1).End(xlUp).row
+            ultlinhaPFP3Sided = shtPFP3sided.Cells(Rows.Count, (row - 2) * 5 + 3).End(xlUp).row
             verify = True
             For k = 2 To ultlinhaPFP3Sided + 1
                 If PFPElementNumber = shtPFP3sided.Cells(k, (row - 2) * 5 + 3) Then
@@ -435,10 +458,9 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
                 End If
             Next
             If verify = True Then
-                shtPFP3sided.Cells(ultlinhaPFP + 1, (row - 2) * 5 + 3) = test_3sided_box
+                shtPFP3sided.Cells(ultlinhaPFP3Sided + 1, (row - 2) * 5 + 3) = test_3sided_box
             End If
         End If
-    End If
 End Sub
 
 Private Sub ProcessBucklingCriteria(ByVal iter As Integer)
@@ -467,7 +489,7 @@ Private Sub UpdateHeadUsfos(ByRef Scenario As ScenarioType, ByVal LoadCaseTime A
     FSObject.CopyFile HeadDefaultFile, HeadCaseFile, True
     
     ' Update the head file
-    ModifyHeadFile HeadFile:=HeadCaseFile, LoadCaseTime:=LoadCaseTime
+    ModifyHeadFile headFile:=HeadCaseFile, LoadCaseTime:=LoadCaseTime
 End Sub
 
 Private Sub CopyFirstRunFiles(ByVal ultimaLinha As Long)
@@ -621,7 +643,7 @@ Sub ExecuteProgram(ByVal prog As Program, ByVal workingDirectory As String, ByVa
     Dim PreviousTimestamp As String
     Dim trmFileName As String
     Dim OutputCheckPath As String
-    Dim HasFileChanged1 As Boolean
+    Dim HasFileChanged As Boolean
         
 
     usfosBin = shtScriptUsfos.Range("W1")
@@ -674,15 +696,20 @@ Sub ExecuteProgram(ByVal prog As Program, ByVal workingDirectory As String, ByVa
     
     ExecuteShellCommandHidden fullCommand, workingDirectory
     
-    HasFileChanged1 = HasFileChanged(OutputCheckPath, PreviousTimestamp)
+    HasFileChanged = CheckFileChange(OutputCheckPath, PreviousTimestamp)
 
     ' Check if the file has changed. If it has, the program ran as expected
-    If Not HasFileChanged1 Then
-        MsgBox "Warning: The " & OutputCheckPath & " file was not updated." & _
-                vbNewLine & vbNewLine & _
-                "This means that " & programName & " did not ran as expected" & _
-                vbNewLine & vbNewLine & _
-               "Tip: Check for program license or path issues."
+    If Not HasFileChanged Then
+        response = MsgBox("Warning: The " & OutputCheckPath & " file was not updated." & _
+                            vbNewLine & vbNewLine & _
+                            "This means that " & programName & " did not run as expected" & _
+                            vbNewLine & vbNewLine & _
+                            "Tip: Check for program license or path issues." & _
+                            vbNewLine & vbNewLine & _
+                            "Would you like to continue?", vbYesNo)
+        If response = vbNo Then
+            End
+        End If
     End If
 
     
@@ -758,12 +785,12 @@ Private Function GetNextLoadCaseTime(ByVal loadCaseData As Collection, ByVal las
 
 End Function
 
-Private Sub ModifyHeadFile(ByVal HeadFile As String, ByVal LoadCaseTime As Double)
+Private Sub ModifyHeadFile(ByVal headFile As String, ByVal LoadCaseTime As Double)
     ' Modify the head file based on the case information
     Dim HeadFileHandle As Long
     
     HeadFileHandle = FreeFile
-    Open HeadFile For Input As HeadFileHandle
+    Open headFile For Input As HeadFileHandle
     HeadFileContent = Input(LOF(HeadFileHandle), HeadFileHandle)
     Close #HeadFileHandle
     
@@ -772,7 +799,7 @@ Private Sub ModifyHeadFile(ByVal HeadFile As String, ByVal LoadCaseTime As Doubl
 
     ' Open the file for writing
     HeadFileHandle = FreeFile
-    Open HeadFile For Output As HeadFileHandle
+    Open headFile For Output As HeadFileHandle
     Print #HeadFileHandle, HeadFileContent
     Close #HeadFileHandle
 End Sub
@@ -974,14 +1001,18 @@ Sub CopyFahtsOutFiles(ByVal scenarioName, ByVal caseFolderPath As String, ByVal 
     FSObject.CopyFile SourceFilePath, DestinationFilePath, True
 End Sub
 
-Sub run_fahts_on_going()
+Sub Run_fahts_only()
     Dim row As Long
     Dim ultimaLinha As Long
     Dim thisScenario As ScenarioType
     
+    TurnOffCalcs
+    
     ultimaLinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
     
     AuxMacros.setCurrentFolder
+    
+    AuxMacros.CheckAndAlertProgram Program.FAHTS
     
     For row = 2 To ultimaLinha
         If shtScriptUsfos.Cells(row, "S") = "on going" Then
@@ -995,5 +1026,7 @@ Sub run_fahts_on_going()
 
         End If
     Next
-
+    
+    TurnOnCalcs
 End Sub
+

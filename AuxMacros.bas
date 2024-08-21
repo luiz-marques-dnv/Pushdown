@@ -56,7 +56,7 @@ Private Function GetProgramPath(ByVal prog As Program) As String
     End Select
 End Function
 
-Private Sub CheckAndAlertProgram(ByVal prog As String)
+Sub CheckAndAlertProgram(ByVal prog As String)
     Dim FileSystem As Object
     Dim programPath As String
     
@@ -265,33 +265,49 @@ End Sub
 
 Sub PFP_From_Fahts_new()
 'TODO: Place in a better module
+    Dim ultimaLinha As Long
+    Dim row As Long
+    Dim thisScenario As ScenarioType
+    Dim HeadFAHTSFile As String
+    Dim allElements As Collection
+    Dim IthreeSidedElements As Collection
+    Dim boxThreeSidedElements As Collection
+    
+    response = MsgBox("This will clear all PFPs in worksheet and get new ones from the FAHTS Head for each scenario" & _
+                        vbNewLine & vbNewLine & _
+                        "Would you like to continue?", vbYesNo)
+        
+    If response = vbNo Then
+        End
+    End If
+    
     
     TurnOffCalcs
     
     Call Clear_PFP
 
-    ultimalinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
+    ultimaLinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
     
     
-    For row = 2 To ultimalinha
+    For row = 2 To ultimaLinha
         ' Get scenario attributes
         thisScenario = InitScenariosAttributes(row)
 
         HeadFAHTSFile = thisScenario.FolderPath & "\" & "head_" & thisScenario.Name & ".fem"
         
         ' Get elements from head file
-        allElements = GetElementsFromHeadFile(HeadFAHTSFile , "All Elements")
+        Set allElements = GetElementsfromHeadFile(HeadFAHTSFile, "All Elements")
 
         ' Get I 3-sided elements from head file
-        IthreeSidedElements = GetElementsFromHeadFile(HeadFAHTSFile , "I 3-Sided")
+        Set IthreeSidedElements = GetElementsfromHeadFile(HeadFAHTSFile, "I 3-Sided")
 
         ' Get Box 3-sided elements from head file
-        boxThreeSidedElements = GetElementsFromHeadFile(HeadFAHTSFile , "Box 3-Sided")
+        Set boxThreeSidedElements = GetElementsfromHeadFile(HeadFAHTSFile, "Box 3-Sided")
 
         ' Write the PFPs to the worksheet file
         WritePFPsToWorksheet allElements, IthreeSidedElements, boxThreeSidedElements, row
 
-    next row
+    Next row
 
 
     TurnOnCalcs
@@ -334,7 +350,6 @@ Function GetElementsfromHeadFile(ByVal headFile As String, command As String) As
     Set GetElementsfromHeadFile = elements
 End Function
 
-
 Function getElementsFromString(ByVal fileContent As String, ByVal FAHTSCommand As String) As Collection
     ' This function search for elements called after every FAHTSCommands
     ' It founds all FAHTSCommands and get the elements until a non-numeric values appears
@@ -348,7 +363,7 @@ Function getElementsFromString(ByVal fileContent As String, ByVal FAHTSCommand A
     
     Set elements = New Collection
 
-    ' Formating the content
+    ' Formating the content trimming blank spaces and replacing linebreaks
     fileContent = WorksheetFunction.Trim(fileContent)
     fileContent = Replace(fileContent, Chr(13), " ")
     fileContent = Replace(fileContent, Chr(10), " ")
@@ -363,13 +378,14 @@ Function getElementsFromString(ByVal fileContent As String, ByVal FAHTSCommand A
         startPos = InStr(startPos, fileContent, FAHTSCommand)
         
         If startPos > 0 Then
-            ' Move the starting position to the end of the FAHTSCommand. Now all content after will
+            ' The elements start after command
             startPos = startPos + Len(FAHTSCommand)
             
             ' Initialize endPos
             endPos = Len(fileContent)
             
             ' Find the position of the first non-numeric character after the FAHTSCommand
+            ' In this way consider elements that were written just on lines after the command
             For i = startPos To Len(fileContent)
                 If Not IsNumeric(Mid(fileContent, i, 1)) And Mid(fileContent, i, 1) <> " " Then
                     endPos = i - 1
@@ -378,17 +394,16 @@ Function getElementsFromString(ByVal fileContent As String, ByVal FAHTSCommand A
                 End If
             Next i
             
-            ' Extract the value
+            ' Extract the elements and format
             extractedValue = Mid(fileContent, startPos, endPos - startPos + 1)
             extractedValue = WorksheetFunction.Trim(extractedValue)
             
+            ' Splitting to get easily each value
             splitValues = Split(extractedValue)
-            
             For i = 0 To UBound(splitValues)
                 elementNumber = CLng(splitValues(i))
                 elements.Add elementNumber
             Next i
-            
             
             startPos = endPos + 1
         End If
@@ -421,51 +436,30 @@ Function ReadFile(filePath As String) As String
     ReadFile = fileContent
 End Function
 
-
-
-
-Sub test_get_elements_from_head_file()
-    Dim headFile As String
-    Dim elements As Collection
+Sub WritePFPsToWorksheet(allElements As Collection, IthreeSidedElements As Collection, boxThreeSidedElements As Collection, row As Long)
     Dim element As Variant
-    Dim thisScenario As ScenarioType
-    Dim row As Long
-    
-    row = 4
+    Dim elementNumber As Variant
 
-    thisScenario = InitScenariosAttributes(row)
-    
-    'headFile = thisScenario.FolderPath & "\" & "head_" & thisScenario.Name & ".fem"
-    
-    headFile = "C:\Users\LUIMAR\Desktop\aa.txt"
-    
-    'headFile = "C:\Users\LUIMAR\Desktop\head_L24P_S2.fem"
-    
-    Set elements = GetElementsfromHeadFile(headFile, "All Elements")
-    
-    Set elements3Sided = GetElementsfromHeadFile(headFile, "I 3-Sided")
-    
-    Debug.Print "All elements:"
-    
-    For Each element In elements
-        Debug.Print element
-    Next element
-    
-    Debug.Print "3-Sided elements:"
-    
-    For Each element In elements3Sided
-        Debug.Print element
-    Next element
-    
-    
-End Sub
+    ' Write all elements to the worksheet
+    For Each elementNumber In allElements
+        writeAllElement row, elementNumber
 
-Sub clearImeddiateWindow()
+    Next elementNumber
 
+    ' Write I 3-sided elements to the worksheet
+    For Each elementNumber In IthreeSidedElements
+        writeI3SidedElement row, elementNumber
+    Next elementNumber
 
-      Dim i As Integer
-      For i = 0 To 200
-        Debug.Print ""
-      Next i
+    ' Write Box 3-sided elements to the worksheet
+    For Each elementNumber In boxThreeSidedElements
+        writeBox3SidedElement row, elementNumber
+    Next elementNumber
 
 End Sub
+
+
+    
+
+
+
