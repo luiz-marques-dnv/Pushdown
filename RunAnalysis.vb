@@ -997,5 +997,3 @@ Sub run_fahts_on_going()
     Next
 
 End Sub
-
-
