@@ -328,10 +328,10 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         End If
 
         'Copying starin files just to check    TODO: Delete after checking
-        CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, iter, loadcase
+        CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
 
         ' Copying Status files just to check buckling    TODO: Delete after checking
-        CopyStatusFiles thisScenario.Name, thisScenario.FolderPath, iter, loadcase
+        CopyStatusFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
         
         ' Reset Eligible Element to default values
         pfpEligibleElement = blankElement
