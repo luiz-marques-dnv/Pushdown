@@ -1,0 +1,180 @@
+Sub test()
+    Dim thisScenario As ScenarioType
+    Dim filePath As String
+    Dim outputFile As Integer
+    Dim i As Integer
+    Dim row As Integer
+    Dim workingDirectory As String
+    Dim scenarioName As String
+    Dim programName As Integer
+    Dim Name As String
+    Dim timeSpent As Double
+    
+    ' Set up test parameters
+    AuxMacros.setCurrentFolder
+    
+    ' Define the file path where you want to save the output
+    filePath = "C:\Users\LUIMAR\Desktop\output.txt" ' Change this to your desired file path
+    
+    ' Open the file for output
+    outputFile = FreeFile
+    Open filePath For Append As outputFile
+    
+    For i = 0 To 1000
+        
+        row = i Mod 8 + 2
+        
+        thisScenario = InitScenariosAttributes(row)
+        
+        workingDirectory = thisScenario.FolderPath ' Set this to a valid directory on your system
+        scenarioName = thisScenario.Name
+        
+        programName = i Mod 4
+        
+        Select Case programName
+            Case 0
+                Name = "Fahts"
+            Case 1
+                Name = "Usfos"
+            Case 2
+                Name = "Strain"
+            Case 3
+                Name = "Strain Neg"
+        End Select
+        
+        ' Call the ExecuteProgram subroutine
+        timeSpent = ExecuteProgramDebug(programName, workingDirectory, scenarioName)
+        
+        ' Write the output to the text file
+        Print #outputFile, Name & "," & timeSpent
+        
+    Next i
+    
+    ' Close the file
+    Close outputFile
+End Sub
+
+Sub test2()
+    Dim thisScenario As ScenarioType
+    Dim filePath As String
+    Dim outputFile As Integer
+    Dim i As Integer
+    Dim row As Integer
+    Dim workingDirectory As String
+    Dim scenarioName As String
+    Dim programName As Program
+    Dim Name As String
+    Dim timeSpent As Double
+    
+    ' Set up test parameters
+    AuxMacros.setCurrentFolder
+    
+    ' Define the file path where you want to save the output
+    filePath = "C:\Users\LUIMAR\Desktop\output.txt" ' Change this to your desired file path
+    
+    ' Open the file for output
+    'outputFile = FreeFile
+    'Open FilePath For Append As outputFile
+    
+    
+    row = 4
+    
+    thisScenario = RunAnalisys.InitScenariosAttributes(row)
+    
+    workingDirectory = thisScenario.FolderPath ' Set this to a valid directory on your system
+    scenarioName = thisScenario.Name
+    
+    programName = Program.Strain
+   
+    
+    ' Call the ExecuteProgram subroutine
+    ExecuteProgram programName, workingDirectory, scenarioName
+    
+    a = 1
+
+    ' Close the file
+    'Close outputFile
+End Sub
+
+Sub test_change()
+    Dim filePath As String
+    Dim PreviousTimestamp As String
+    Dim HasChanged As Boolean
+    
+    
+    
+    ' Set the file path
+    filePath = "D:\LUIMAR\PUSHDOWN\Testes\TS063\Teste Planilha V4 All steps\21_L06_seg_TS063_L_Pool_P1\L06_seg_TS063_L_Pool_P1_output_beltemp.fem"
+    
+    ' Get the initial timestamp
+    PreviousTimestamp = GetFileLastModified(filePath)
+    
+    ' Check if the file has changed
+    HasChanged = CheckFileChange(filePath, PreviousTimestamp)
+    
+    ' Display the result
+    If HasChanged Then
+        MsgBox "The file has changed"
+    Else
+        MsgBox "The file has not changed"
+    End If
+End Sub
+
+Sub test_WritePFP()
+    Dim allElements As Collection
+    Dim IthreeSidedElements As Collection
+    Dim boxThreeSidedElements As Collection
+    Dim row As Long
+
+    row = 4
+
+    Set allElements = New Collection
+    Set IthreeSidedElements = New Collection
+    Set boxThreeSidedElements = New Collection
+
+
+    IthreeSidedElements.Add 4
+    IthreeSidedElements.Add 5
+    IthreeSidedElements.Add 6
+
+    boxThreeSidedElements.Add 7
+    boxThreeSidedElements.Add 8
+    boxThreeSidedElements.Add 9
+
+    WritePFPsToWorksheet allElements, IthreeSidedElements, boxThreeSidedElements, row
+
+End Sub
+
+Sub test_get_elements_from_head_file()
+    Dim headFile As String
+    Dim elements As Collection
+    Dim element As Variant
+    Dim thisScenario As ScenarioType
+    Dim row As Long
+    Dim allElements As Collection
+    Dim elements3Sided As Collection
+    Dim boxThreeSidedElements As Collection
+    
+    TurnOffCalcs
+    
+    row = 4
+
+    thisScenario = InitScenariosAttributes(row)
+    
+    'headFile = thisScenario.FolderPath & "\" & "head_" & thisScenario.Name & ".fem"
+    
+    'headFile = "C:\Users\LUIMAR\Desktop\aa.txt"
+    
+    headFile = "C:\Users\LUIMAR\Desktop\head_L24P_S2.fem"
+    
+    Set allElements = GetElementsfromHeadFile(headFile, "All Elements")
+    
+    Set elements3Sided = GetElementsfromHeadFile(headFile, "I 3-Sided")
+    
+    Set boxThreeSidedElements = GetElementsfromHeadFile(headFile, "Box 3-Sided")
+
+    WritePFPsToWorksheet allElements, elements3Sided, boxThreeSidedElements, row
+    
+    TurnOnCalcs
+    
+End Sub
