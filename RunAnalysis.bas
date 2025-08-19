@@ -276,7 +276,6 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
     Dim HighestElementStrain As Long
     Dim HighestStrainCriteria As Double
     Dim ElementsAboveCriteria As Scripting.Dictionary
-    Dim ElementsAbove0Criteria As Scripting.Dictionary
     Dim pfpEligibleElement As elementType
     Dim blankElement As elementType
     
@@ -316,16 +315,7 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
             ' Find the highest strain element eligible for PFP (critical element)
             pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria, thisScenario)
         End If
-        
-
-        ' Process strain criteria with 0 to store the highest strain of all
-        Set ElementsAbove0Criteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, 0)
-        
-        ' Get the highest strain considering that ElementsAboveCriteria is sorted from highest to lowest strain
-        If ElementsAbove0Criteria.Count > 0 Then
-            HighestStrainCriteria = ElementsAbove0Criteria.Items(0)
-            
-        End If
+    
 
         ' Read elements above buckling criteria
         'ProcessBucklingCriteria iter
@@ -334,15 +324,9 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         If pfpEligibleElement.Strain > HighestPFPStrain Then
             HighestPFPStrain = pfpEligibleElement.Strain
             HighestElementStrain = pfpEligibleElement.Number
-        End If
-        
-
-        ' Update the highest strain and time if the current strain is higher
-        If HighestStrainCriteria >= HighestStrain Then
-            HighestStrain = HighestStrainCriteria
             HighestStrainTime = LoadCaseTime
         End If
-        
+
         'Copying starin files just to check    TODO: Delete after checking
         CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, iter, loadcase
 
