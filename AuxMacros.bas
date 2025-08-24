@@ -5,7 +5,7 @@ Enum Program
     FAHTS
     Usfos
     Strain
-    SRAINNeg
+    StrainNeg
 End Enum
 Function TurnOffCalcs()
     Application.ScreenUpdating = False
@@ -30,7 +30,7 @@ End Function
 Sub CheckPrograms()
     Dim prog As Program
 
-    For prog = Program.FAHTS To Program.SRAINNeg
+    For prog = Program.FAHTS To Program.StrainNeg
 
         CheckAndAlertProgram prog
     Next prog
@@ -49,7 +49,7 @@ Private Function GetProgramPath(ByVal prog As Program) As String
             GetProgramPath = usfosFolder & "\Usfos.exe"
         Case Strain
             GetProgramPath = usfosFolder & "\strain.exe"
-        Case SRAINNeg
+        Case StrainNeg
             GetProgramPath = usfosFolder & "\strain_neg.exe"
         Case Else
             GetProgramPath = ""

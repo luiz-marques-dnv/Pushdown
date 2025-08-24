@@ -2,7 +2,7 @@ Const HEAD_DEFAULT_FILE As String = "\usfos_head_default.fem"
 Const STRASPAS As String = """"   'defining aspas to be inside strings
 Const LOG_FILE_NAME As String = "PFP_Analysis_Log.txt"
 
-Public checkStrainNegCriteria As Double
+Public checkStrainNegCriteria As Boolean
 Public RunningMETHOD As String
 
 Type ScenarioType
@@ -15,6 +15,7 @@ Type ScenarioType
     strainCriteria As Double
     row As Long
     Iteration As Long
+    FileUsfosOut As String
 End Type
 
 Sub Run_analysis()
@@ -37,7 +38,7 @@ Sub Run_analysis()
 
     checkStrainNegCriteria = shtScriptUsfos.Range("W32").Value
 
-    ' TODO: CHange this to a config step
+    ' TODO: CHange this to a config module
     RunningMETHOD = Worksheets("Config").Range("A2").Value ' "HighestStrainMethod" or "UpToTimeMethod"
 
     ' Main processing loop
@@ -48,7 +49,7 @@ Sub Run_analysis()
             iter = iter + 1
         
             ProcessIteration iter, row
-            Debug.Print 1
+            
             ' Update iteration number in the worksheet
             shtScriptUsfos.Cells(row, "D") = iter
         Loop
@@ -115,13 +116,18 @@ Private Sub ProcessIteration(iter As Long, row As Long)
     ' Finally update to the case with highest strain for plotting
     ElseIf PFPElement = 0 Then
         ' Update Head USFOS file
-        UpdateHeadUsfos thisScenario, HighestStrainTime, "AtTime"
+        'TODO: Handle better after Paula response
+        ' UpdateHeadUsfos thisScenario, HighestStrainTime, "AtTime"
 
-        ' Running Usfos
-        ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
+        ' ' Running Usfos
+        ' ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
 
-        ' Running strain and Straing neg to get values outside criteria
-        ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
+        ' ' Running strain and Straing neg to get values outside criteria
+        ' ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
+    
+        ' If checkStrainNegCriteria Then
+        '     ExecuteProgram Program.StrainNeg, thisScenario.FolderPath, thisScenario.Name
+        ' End If
 
         shtScriptUsfos.Cells(row, "S") = "completed"
     End If
@@ -150,13 +156,18 @@ Function InitScenariosAttributes(ByVal row As Long) As ScenarioType
     thisScenario.Iteration = shtScriptUsfos.Cells(row, "D")
     thisScenario.strainCriteria = shtScriptUsfos.Cells(row, "I")
 
+
+    ' Paths
     thisScenario.FolderPath = CURRENT_FOLDER & "\" & thisScenario.Number & "_" & thisScenario.Name
-    
+
+    ' Beltemp file path
     BeltempFilename = thisScenario.Name & "_output_beltemp"
     thisScenario.BeltempFilePath = thisScenario.FolderPath & "\" & BeltempFilename & ".fem"
 
+    ' Usfos Output paths
     thisScenario.FileStrain = thisScenario.FolderPath & "\" & thisScenario.Name & "_strain_output"
     thisScenario.FileStrainNeg = thisScenario.FolderPath & "\" & thisScenario.Name & "_strain_neg_output"
+    thisScenario.FileUsfosOut = thisScenario.FolderPath & "\" & thisScenario.Name & "_usfos_output.out"
 
     InitScenariosAttributes = thisScenario
 End Function
@@ -216,9 +227,9 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
         pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria, thisScenario)
 
 
-        If checkStrainNegCriteria = 1 And pfpEligibleElement.Number = 0 Then
+        If checkStrainNegCriteria And pfpEligibleElement.Number = 0 Then
             ' Running straing neg to get values outside criteria
-            ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
+            ExecuteProgram Program.StrainNeg, thisScenario.FolderPath, thisScenario.Name
 
             ' Process negative strain criteria
             Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrainNeg, thisScenario.strainCriteria * -1)
@@ -265,6 +276,7 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
     
     HighestStrainMethod = Array(HighestStrainTime, HighestElementStrain)
 End Function
+
 Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScenario As ScenarioType) As Variant()
     ' Get the time of the highest strain element above criteria
     Dim loadCaseTimeDetails As Variant
@@ -305,9 +317,9 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria, thisScenario)
 
 
-        If checkStrainNegCriteria = 1 And pfpEligibleElement.Number = 0 Then
+        If checkStrainNegCriteria And pfpEligibleElement.Number = 0 Then
             ' Running straing neg to get values outside criteria
-            ExecuteProgram Program.SRAINNeg, caseFolderPath, scenarioName
+            ExecuteProgram Program.StrainNeg, thisScenario.FolderPath, thisScenario.Name
 
             ' Process negative strain criteria
             Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrainNeg, thisScenario.strainCriteria * -1)
@@ -321,7 +333,7 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         'ProcessBucklingCriteria iter
 
         ' Update the highest eligeble strain and element if the current strain is higher
-        If pfpEligibleElement.Strain > HighestPFPStrain Then
+        If Abs(pfpEligibleElement.Strain) > Abs(HighestPFPStrain) Then
             HighestPFPStrain = pfpEligibleElement.Strain
             HighestElementStrain = pfpEligibleElement.Number
             HighestStrainTime = LoadCaseTime
@@ -336,7 +348,9 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         ' Reset Eligible Element to default values
         pfpEligibleElement = blankElement
 
-    
+        ' Check if any error happened in USFOS analysis
+        checkErrorInFile thisScenario.FileUsfosOut, thisScenario
+
     upToTimeMethod = Array(HighestStrainTime, HighestElementStrain)
 End Function
 
@@ -395,6 +409,7 @@ Private Function FindPFPEligibleElement(ByRef elementsStrain As Scripting.Dictio
     'Verificar se elemento é elegível para receber PFP e retorna o numero do elemento elegível
     Dim test_strain As Long
     Dim element As elementType
+    Dim blankElement As elementType
     Dim i As Long
     
     If elementsStrain.Count > 0 Then
@@ -417,8 +432,11 @@ Private Function FindPFPEligibleElement(ByRef elementsStrain As Scripting.Dictio
             End If
         Next
     End If
-
-    FindPFPEligibleElement = element
+    
+    Debug.Print element.Number & "," & element.Strain
+    element = blankElement
+    Debug.Print element.Strain
+    'FindPFPEligibleElement = element
 End Function
 
 Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
@@ -428,14 +446,24 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
     Dim k As Long
     Dim test_3sided_I As String
     Dim test_3sided_Box As String
+    Dim thisScenario As ScenarioType
 
-   If PFPElementNumber <> 0 Then
+
+    If PFPElementNumber <> 0 Then
         writeAllElement row, PFPElementNumber
 
         writeI3SidedElement row, PFPElementNumber
 
         writeBox3SidedElement row, PFPElementNumber
+
+        thisScenario = InitScenariosAttributes(row)
+
+        ' Log the element
+        LogElement PFPElementNumber, thisScenario
+    
     End If
+
+
 End Sub
 
 Sub writeAllElement(ByVal row As Long, ByVal PFPElementNumber As Long)
@@ -700,7 +728,7 @@ Private Sub ExecuteProgramBackup(ByVal programName As Program, ByVal workingDire
             outputFileName = scenarioName & "_strain.trm"
             inputFileName = "strain_input.inp"
 
-        Case Program.SRAINNeg
+        Case Program.StrainNeg
             executable = usfosBin & "\strain_neg.exe"
             executionCommand = " 400 > "
             outputFileName = scenarioName & "_strain_neg.trm"
@@ -774,7 +802,7 @@ Sub ExecuteProgram(ByVal prog As Program, ByVal workingDirectory As String, ByVa
             outputFileName = scenarioName & "_strain_output"
             programName = "STRAIN"
 
-        Case Program.SRAINNeg
+        Case Program.StrainNeg
             executable = usfosBin & "\strain_neg.exe"
             executionCommand = " 400 > "
             trmFileName = scenarioName & "_strain_neg.trm"
@@ -792,7 +820,7 @@ Sub ExecuteProgram(ByVal prog As Program, ByVal workingDirectory As String, ByVa
     
     ' File path used for checking if the program run as expected
     OutputCheckPath = workingDirectory & "\" & outputFileName
-    Debug.Print OutputCheckPath
+    
     ' Get the timestamp before running the program
     PreviousTimestamp = ScriptsHandling.GetFileLastModified(OutputCheckPath)
     
@@ -817,7 +845,7 @@ Sub ExecuteProgram(ByVal prog As Program, ByVal workingDirectory As String, ByVa
     
 End Sub
 Private Sub ExecuteShellCommandHidden(ByVal command As String, workingDirectory As String)
-    'On Error GoTo ErrorHandler
+    ' Calls Shell to execute outside programs in hidden mode (intWindowStyle=7)
 
     Dim shellObject As Object
     Dim ExecuteShellCommandHidden As Variant
@@ -1175,13 +1203,76 @@ Private Sub LogAlreadyProtectedWarning(ByVal elementNumber As Long, ByRef scenar
                    "Scenario " & scenario.Number & ": " & scenario.Name & " at Iteration: " & scenario.Iteration
 End Sub
 
-
-Sub runFahts_and_Usfos()
-
-Run_fahts_only
-Run_analysis
-
+Private Sub LogError(ByVal errorMessage As String, ByRef scenario As ScenarioType)
+    WriteToLogFile "ERROR: " & errorMessage & " - Scenario " & scenario.Number & ": " & scenario.Name & _
+                   " at Iteration: " & scenario.Iteration
 End Sub
+
+
+Sub checkErrorInFile(ByVal filePath As String, ByRef scenario As ScenarioType)
+    Dim fileContent As String
+    Dim line As String
+    Dim lineNumber As Long
+    Dim errorFound As Boolean
+    Dim fileNumber As Integer
+
+    fileNumber = FreeFile
+    Open filePath For Input As #fileNumber
+
+    lineNumber = 0
+    errorFound = False
+
+    Do While Not EOF(fileNumber)
+        Line Input #fileNumber, line
+        lineNumber = lineNumber + 1
+
+        ' Check for specific error patterns in the line
+        If InStr(UCase(line), "ERROR") > 0 Then
+            errorFound = True
+            Exit Do
+        End If
+    Loop
+
+    Close #fileNumber
+
+    If errorFound Then
+        errorMessage = "ERROR found in file: " & scenario.FileUsfosOut & " at line: " & lineNumber
+        LogError errorMessage, scenario
+
+        ' Update completion status 
+        'TODO: Implement completion status update
+        'TODO: check if completed is suitable
+        shtScriptUsfos.Cells(row, "S") = "completed"
+
+        ' Change verify column
+        shtScriptUsfos.Cells(scenario.row, "U").Value = "ERROR"
+    End If
+End Sub
+
+Sub LogElement(ByVal elementNumber As Long, ByRef scenario As ScenarioType)
+    WriteToLogFile "INFO: Element " & elementNumber & " protected - Scenario " & scenario.Number & ": " & scenario.Name & _
+                   " at Iteration: " & scenario.Iteration
+End Sub
+
+Sub testCheckErrorInFile()
+    Dim scenario As ScenarioType
+    Dim filePath As String
+    
+    ' Initialize a test scenario
+    scenario.Number = 21
+    scenario.Name = "TestScenario"
+    scenario.Iteration = 1
+    scenario.FolderPath = "D:\LUIMAR\SBM\TS063\Teste_AtTime_UptoTime\Automatizado_Planilha_UpToTime\21_L06_seg_TS063_L_Pool_P1_tests"
+    
+    ' Set the file path to check
+    filePath = scenario.FolderPath & "\L06_seg_TS063_L_Pool_P1_usfos_output.out"
+    
+    CURRENT_FOLDER = "D:\LUIMAR\SBM\TS063\Teste_AtTime_UptoTime"
+    
+    ' Call the function to check for errors in the file
+    checkErrorInFile filePath, scenario
+End Sub
+
 
 
 
