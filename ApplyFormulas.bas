@@ -86,8 +86,9 @@ Sub BuildFormulaBlocks_PFP_Scenarios(ByVal ws As Worksheet, _
         With ws.Range(ws.Cells(1, blockStart), ws.Cells(1, colValue)).Font
             .Bold = True
         End With
-        
-        ' 2) Value column (5th col of block) show two decimals (include header total)
+
+        ' 2) Value column (3rd and 5th col of block) show 0 and two decimals respectively  (include header total)
+        ws.Range(ws.Cells(1, colData), ws.Cells(lastRow, colData)).NumberFormat = "0"
         ws.Range(ws.Cells(1, colValue), ws.Cells(lastRow, colValue)).NumberFormat = "0.00"
         
         ' 3) Block vertical borders on body (rows 2..lastRow) so row 1 keeps "only below"
@@ -150,10 +151,9 @@ End Function
 Option Explicit
 
 ' Reads counts from Script_Usfos and FEMElements, then builds the blocks on the ActiveSheet.
-Sub BuildFormulaBlocks_FromSheets()
-    Dim target As Worksheet
-    Set target = ActiveSheet  ' change if you want a specific sheet
-    
+Sub BuildFormulaBlocks_AllScenarios()
+    Dim ws_PFP_Scenarios As Worksheet, ws_PFP_Scenarios_3_Sided As Worksheet
+
     Dim wsScen As Worksheet, wsElem As Worksheet
     On Error Resume Next
     Set wsScen = ThisWorkbook.Worksheets("Script_Usfos")
@@ -179,10 +179,12 @@ Sub BuildFormulaBlocks_FromSheets()
     End If
     
     TurnOffCalcs
-    
-    ' startCol:=1 ? column A; firstAnchorRow:=2 (A2 in Script_Usfos)
-    BuildFormulaBlocks_PFP_Scenarios target, 1, scenarioCount, elementCount, 2
-    
+
+    Set ws_PFP_Scenarios = ThisWorkbook.Worksheets("PFP Scenarios")
+    BuildFormulaBlocks_PFP_Scenarios ws_PFP_Scenarios, 1, scenarioCount, elementCount, 2
+
+    Set ws_PFP_Scenarios_3_Sided = ThisWorkbook.Worksheets("PFP Scenario 3-Sided")
+    BuildFormulaBlocks_PFP_Scenarios ws_PFP_Scenarios_3_Sided, 1, scenarioCount, elementCount, 2
     TurnOnCalcs
 End Sub
 
@@ -196,6 +198,3 @@ Private Function CountRows(ByVal ws As Worksheet, ByVal colIdx As Long, ByVal st
         CountRows = lastRow - startRow + 1
     End If
 End Function
-
-
-

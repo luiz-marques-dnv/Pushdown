@@ -1,4 +1,3 @@
-Const HEAD_DEFAULT_FILE As String = "\usfos_head_default.fem"
 Const STRASPAS As String = """"   'defining aspas to be inside strings
 Const LOG_FILE_NAME As String = "PFP_Analysis_Log.txt"
 
@@ -349,7 +348,13 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         pfpEligibleElement = blankElement
 
         ' Check if any error happened in USFOS analysis
-        checkErrorInFile thisScenario.FileUsfosOut, thisScenario
+        errorFound = checkErrorInFile(thisScenario.FileUsfosOut, thisScenario)
+
+        If errorFound Then
+            HighestStrainTime = 0
+            HighestElementStrain = 0
+            handleError thisScenario.FileUsfosOut, thisScenario
+        End If
 
     upToTimeMethod = Array(HighestStrainTime, HighestElementStrain)
 End Function
@@ -591,7 +596,7 @@ End Sub
 
 Private Sub UpdateHeadUsfos(ByRef scenario As ScenarioType, ByVal LoadCaseTime As String, ByVal pushDownMethod As String)
     ' Updates the Head USFOS file for each row in the specified range.
-    ' TODO: CHange the fucntion to receive the files path and not the row
+    ' TODO: CHange the fucntion to receive the files path
     Dim HeadFilename As String
     Dim HeadDefaultFile As String
     Dim HeadCaseFile As String
@@ -600,9 +605,9 @@ Private Sub UpdateHeadUsfos(ByRef scenario As ScenarioType, ByVal LoadCaseTime A
     Dim FSObject As Object
 
     
-    ' Define the paths to Head and Beltemp files
+    ' Define the paths to Head file
     HeadFilename = "usfos_head_" & scenario.Name
-    HeadDefaultFile = CURRENT_FOLDER & HEAD_DEFAULT_FILE
+    HeadDefaultFile = scenario.FolderPath & "\" & HeadFilename & "_default.fem"
     HeadCaseFile = scenario.FolderPath & "\" & HeadFilename & ".fem"
     
     ' Copy and modify head file
@@ -655,27 +660,6 @@ Private Sub CopyFirstRunFiles(ByVal ultimaLinha As Long)
         CopyCaseFile caseFolderPath, firstRunFolderPath, scenarioName & "_output.raf"
     Next row
 End Sub
-
-Private Sub CopyCaseFile(ByVal sourcePath As String, ByVal destinationPath As String, ByVal fileName As String)
-    ' Copy a file from the source path to the destination path and overwites if it already exists.
-    Dim fso As Object
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    
-    Dim SourceFile As String
-    Dim DestinationFile As String
-    
-    SourceFile = sourcePath & "\" & scenarioName & fileName
-    DestinationFile = destinationPath & "\" & scenarioName & fileName
-    
-    On Error Resume Next
-    fso.CopyFile SourceFile, DestinationFile  ' Copy source to target and overwrite if the file exists.
-    If Err.Number <> 0 Then
-        Debug.Print "Source:" & SourceFile
-        'MsgBox "An error occurred while copying the file " & fileName & ". Error: " & Err.Description, vbCritical
-    End If
-    On Error GoTo 0
-End Sub
-
 
 Private Sub ExecuteShellCommand(ByVal command As String)
     'On Error GoTo ErrorHandler
@@ -1209,7 +1193,7 @@ Private Sub LogError(ByVal errorMessage As String, ByRef scenario As ScenarioTyp
 End Sub
 
 
-Sub checkErrorInFile(ByVal filePath As String, ByRef scenario As ScenarioType)
+Private Function checkErrorInFile(ByVal filePath As String, ByRef scenario As ScenarioType)
     Dim fileContent As String
     Dim line As String
     Dim lineNumber As Long
@@ -1235,18 +1219,16 @@ Sub checkErrorInFile(ByVal filePath As String, ByRef scenario As ScenarioType)
 
     Close #fileNumber
 
-    If errorFound Then
-        errorMessage = "ERROR found in file: " & scenario.FileUsfosOut & " at line: " & lineNumber
-        LogError errorMessage, scenario
+    checkErrorInFile = errorFound
+End Function
 
-        ' Update completion status 
-        'TODO: Implement completion status update
-        'TODO: check if completed is suitable
-        shtScriptUsfos.Cells(row, "S") = "completed"
-
-        ' Change verify column
-        shtScriptUsfos.Cells(scenario.row, "U").Value = "ERROR"
-    End If
+Sub handleError(filePath As String, ByRef scenario As ScenarioType)
+    ' Handle error scenario
+    errorMessage = "ERROR found in file: " & filePath
+    LogError errorMessage, scenario
+    
+    ' Write error in column U
+    shtScriptUsfos.Cells(scenario.row, "U").Value = "ERROR"
 End Sub
 
 Sub LogElement(ByVal elementNumber As Long, ByRef scenario As ScenarioType)
@@ -1272,10 +1254,4 @@ Sub testCheckErrorInFile()
     ' Call the function to check for errors in the file
     checkErrorInFile filePath, scenario
 End Sub
-
-
-
-
-
-
 

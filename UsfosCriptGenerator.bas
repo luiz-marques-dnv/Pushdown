@@ -10,6 +10,7 @@ Sub GerarHeadfiles_usfos()
     Dim scriptUsfos As String
     Dim scriptStrain As String
     Dim scriptStrainNeg As String
+    Dim response As VbMsgBoxResult
     
     ' Initialize Current Folder
     AuxMacros.setCurrentFolder
@@ -18,14 +19,23 @@ Sub GerarHeadfiles_usfos()
 
     InitializeDefaults
 
-    scriptUsfos = "script_rodar_USFOS"
-    scriptStrain = "script_rodar_STRAIN"
-    scriptStrainNeg = "script_rodar_STRAIN_neg"
-    
-    ' Creating Script files for Usfos, Strain and Strain neg as txt
-    ScriptsHandling.CreateScriptFiles commandName:="USFOS", ScriptName:=scriptUsfos
-    ScriptsHandling.CreateScriptFiles commandName:="STRAIN", ScriptName:=scriptStrain
-    ScriptsHandling.CreateScriptFiles commandName:="STRAIN NEG", ScriptName:=scriptStrainNeg
+    ' Asks the user if they want to only update files or if they want to update the formulas of the worksheet
+    ' Update formulas is only necessary when the number of scenarios or FEM elements has changed
+    response = AskToUpdateFormulas()
+
+    If response Then
+    ApplyFormulas.BuildFormulaBlocks_AllScenarios
+    End If
+
+
+'    scriptUsfos = "script_rodar_USFOS"
+'    scriptStrain = "script_rodar_STRAIN"
+'    scriptStrainNeg = "script_rodar_STRAIN_neg"
+'
+'    ' Creating Script files for Usfos, Strain and Strain neg as txt
+'    ScriptsHandling.CreateScriptFiles commandName:="USFOS", ScriptName:=scriptUsfos
+'    ScriptsHandling.CreateScriptFiles commandName:="STRAIN", ScriptName:=scriptStrain
+'    ScriptsHandling.CreateScriptFiles commandName:="STRAIN NEG", ScriptName:=scriptStrainNeg
   
     For row = 2 To ultimaLinha
         If Not AuxMacros.IsCompleted(row) Then
@@ -34,10 +44,10 @@ Sub GerarHeadfiles_usfos()
         End If
     Next row
 
-    'Renaming scripts from txt to bat
-    ScriptsHandling.FinalizeScripts ScriptName:=scriptUsfos
-    ScriptsHandling.FinalizeScripts ScriptName:=scriptStrain
-    ScriptsHandling.FinalizeScripts ScriptName:=scriptStrainNeg
+'    'Renaming scripts from txt to bat
+'    ScriptsHandling.FinalizeScripts ScriptName:=scriptUsfos
+'    ScriptsHandling.FinalizeScripts ScriptName:=scriptStrain
+'    ScriptsHandling.FinalizeScripts ScriptName:=scriptStrainNeg
 
     MsgBox "Script and input files generated!"
     
@@ -250,34 +260,33 @@ Private Sub WriteToScriptFiles(ByVal row As Long, ByVal scenarioName As String, 
     Strain_directory = shtScriptUsfos.Range("W1") & "\strain.exe"
     Strain_neg_directory = shtScriptUsfos.Range("W1") & "\strain_neg.exe"
 
-    ' Write commands to USFOS script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
-    fileNum = FreeFile()
-    Open UsfosScriptText For Append As #fileNum
-    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #fileNum, STRASPAS & Usfos_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_usfos.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\usfos_input.inp" & STRASPAS
-    Print #fileNum, "::"
-    Close #fileNum
-
-    ' Write commands to STRAIN script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
-    fileNum = FreeFile()
-    Open StrainScriptText For Append As #fileNum
-    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #fileNum, STRASPAS & Strain_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_input.inp" & STRASPAS
-    Print #fileNum, "::"
-    Close #fileNum
-
-    ' Write commands to STRAIN Neg script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
-    fileNum = FreeFile()
-    Open StrainNegScriptText For Append As #fileNum
-    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #fileNum, STRASPAS & Strain_neg_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain_neg.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_neg_input.inp" & STRASPAS
-    Print #fileNum, "::"
-    Close #fileNum
+'    ' Write commands to USFOS script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
+'    fileNum = FreeFile()
+'    Open UsfosScriptText For Append As #fileNum
+'    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
+'    Print #fileNum, STRASPAS & Usfos_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_usfos.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\usfos_input.inp" & STRASPAS
+'    Print #fileNum, "::"
+'    Close #fileNum
+'
+'    ' Write commands to STRAIN script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
+'    fileNum = FreeFile()
+'    Open StrainScriptText For Append As #fileNum
+'    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
+'    Print #fileNum, STRASPAS & Strain_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_input.inp" & STRASPAS
+'    Print #fileNum, "::"
+'    Close #fileNum
+'
+'    ' Write commands to STRAIN Neg script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
+'    fileNum = FreeFile()
+'    Open StrainNegScriptText For Append As #fileNum
+'    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
+'    Print #fileNum, STRASPAS & Strain_neg_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain_neg.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_neg_input.inp" & STRASPAS
+'    Print #fileNum, "::"
+'    Close #fileNum
     
     ' Initialize File paths to text and bat fot Script case
     ScriptFileCaseText = CaseFolder & "\script_case.txt"
     ScriptFileCaseBat = CaseFolder & "\script_case.bat"
-    
     
     ' Write commands to script_case #TODO: change this to be a inside a funciton
     ScriptFileCaseNum = FreeFile
@@ -337,3 +346,19 @@ Private Sub GerarStrainsInput(ByVal scenarioName As String, ByVal CaseFolder As 
 
 End Sub
 
+Public Function AskToUpdateFormulas(Optional autoAnswerYes As Variant) As Boolean
+    If Not IsMissing(autoAnswerYes) Then
+        AskToUpdateFormulas = CBool(autoAnswerYes)
+        Exit Function
+    End If
+    
+    Dim msg As String, resp As VbMsgBoxResult
+    msg = "Do you want to update the worksheet formulas now?" & vbNewLine & vbNewLine & _
+          "Updating is only necessary if:" & vbNewLine & _
+          " - This is your first time running the tool," & vbNewLine & _
+          " - Or the number of scenarios or FEM elements has changed." & vbNewLine & vbNewLine & _
+          "(Choose Yes to refresh formulas, or No to keep them as they are.)"
+
+    resp = MsgBox(msg, vbYesNo + vbQuestion + vbDefaultButton2, "Update Formulas")
+    AskToUpdateFormulas = (resp = vbYes)
+End Function
