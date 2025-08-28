@@ -12,10 +12,10 @@ Sub GerarHeadfiles_usfos()
     Dim scriptStrainNeg As String
     Dim response As VbMsgBoxResult
     
-    ' Initialize Current Folder
+    ' Initialize Current Folder and check programs
     AuxMacros.setCurrentFolder
+    AuxMacros.CheckPrograms
     
-    ultimaLinha = shtScriptFaths.Cells(Rows.Count, "A").End(xlUp).row
 
     InitializeDefaults
 
@@ -37,6 +37,7 @@ Sub GerarHeadfiles_usfos()
 '    ScriptsHandling.CreateScriptFiles commandName:="STRAIN", ScriptName:=scriptStrain
 '    ScriptsHandling.CreateScriptFiles commandName:="STRAIN NEG", ScriptName:=scriptStrainNeg
   
+    ultimaLinha = shtScriptFaths.Cells(Rows.Count, "A").End(xlUp).row
     For row = 2 To ultimaLinha
         If Not AuxMacros.IsCompleted(row) Then
             ProcessCase row
@@ -259,6 +260,7 @@ Private Sub WriteToScriptFiles(ByVal row As Long, ByVal scenarioName As String, 
     Usfos_directory = shtScriptUsfos.Range("W1") & "\Usfos.exe"
     Strain_directory = shtScriptUsfos.Range("W1") & "\strain.exe"
     Strain_neg_directory = shtScriptUsfos.Range("W1") & "\strain_neg.exe"
+    fahtsExe = shtScriptUsfos.Range("W2")
 
 '    ' Write commands to USFOS script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
 '    fileNum = FreeFile()
@@ -293,7 +295,7 @@ Private Sub WriteToScriptFiles(ByVal row As Long, ByVal scenarioName As String, 
     Open ScriptFileCaseText For Output As #ScriptFileCaseNum
     Print #ScriptFileCaseNum, ":::: Shell to start FAHTS run"
     Print #ScriptFileCaseNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #ScriptFileCaseNum, STRASPAS & "../Fahts/fahts_v670.exe" & STRASPAS & " <input.inp"
+    Print #ScriptFileCaseNum, STRASPAS & fahtsExe & STRASPAS & " <input.inp"
     Print #ScriptFileCaseNum, "cd .."
     Print #ScriptFileCaseNum, ":::: Shell to start USFOS run"
     Print #ScriptFileCaseNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS

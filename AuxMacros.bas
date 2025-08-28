@@ -41,10 +41,16 @@ Private Function GetProgramPath(ByVal prog As Program) As String
     
     usfosFolder = shtScriptUsfos.Range("W1")
     fahtsExe = shtScriptUsfos.Range("W2")
+
     
     Select Case prog
         Case FAHTS
             GetProgramPath = fahtsExe
+            ' TODO: Improve the way this error ins handled. Only prompeting for user to know which program is.
+            '        THe best would be to get the path and the program related for throwing errors
+            If fahtsExe = "" Then
+                GetProgramPath = "fahts"
+            End If
         Case Usfos
             GetProgramPath = usfosFolder & "\Usfos.exe"
         Case Strain
@@ -64,6 +70,8 @@ Sub CheckAndAlertProgram(ByVal prog As String)
 
     ' Create a FileSystemObject
     Set FileSystem = CreateObject("Scripting.FileSystemObject")
+
+    ' Check if
 
     ' Check if the path does not exists
     If Not FileSystem.FileExists(programPath) Then
@@ -120,7 +128,7 @@ Sub BrowseUsfosFolderBtn()
     Dim fd As FileDialog
     
     ' Show a message box with a hint for the user
-    MsgBox "Please select the Bin folder for Usfos. Normally in C:\Program Files\DNVGL\Usfos Vxx\Bin"
+    MsgBox "Please select the Bin folder for Usfos. Normally in C:\Program Files\DNV\Usfos Vxx\Bin"
     
     Set fd = Application.FileDialog(msoFileDialogFolderPicker)
 
@@ -281,10 +289,9 @@ Sub PFP_From_Fahts_new()
         End
     End If
     
+    Call Clear_PFP
     
     TurnOffCalcs
-    
-    Call Clear_PFP
 
     ultimaLinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
     
@@ -311,6 +318,9 @@ Sub PFP_From_Fahts_new()
 
 
     TurnOnCalcs
+
+    ' Prompt the user
+    MsgBox "PFPs from head files have been updated successfully!"
 
 End Sub
 
@@ -376,6 +386,7 @@ Function getElementsFromString(ByVal fileContent As String, ByVal FAHTSCommand A
     Do
         ' Find the position of the FAHTSCommand
         startPos = InStr(startPos, fileContent, FAHTSCommand)
+        Debug.Print fileContent
         
         If startPos > 0 Then
             ' The elements start after command
@@ -403,6 +414,7 @@ Function getElementsFromString(ByVal fileContent As String, ByVal FAHTSCommand A
             For i = 0 To UBound(splitValues)
                 elementNumber = CLng(splitValues(i))
                 elements.Add elementNumber
+                Debug.Print elementNumber
             Next i
             
             startPos = endPos + 1
@@ -459,6 +471,8 @@ End Sub
 
 
     
+
+
 
 
 

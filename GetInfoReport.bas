@@ -1,9 +1,6 @@
 Sub BrowseReportEXCELXML()
     Dim fd As FileDialog
     
-    ' Show a message box with a hint for the user
-    MsgBox "Please select the ExcelXML report"
-    
     Set fd = Application.FileDialog(msoFileDialogFilePicker)
     
     setCurrentFolder
