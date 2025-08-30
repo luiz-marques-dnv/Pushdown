@@ -115,14 +115,14 @@ Private Sub ProcessCase(ByVal row As Long)
 
 End Sub
 
-Private Function GetLastLoadCaseInfos(ByVal BeltempFile As String) As Scripting.Dictionary
+Private Function GetLastLoadCaseInfos(ByVal BeltempFile As String) As Object
     ' Read and process the Beltemp file.
     Dim textline As String
     Dim loadcase_line As String
     Dim loadcase_Array() As String
-    Dim loadcase_infos As Scripting.Dictionary
+    Dim loadcase_infos As Object
     
-    Set loadcase_infos = New Dictionary
+    Set loadcase_infos = CreateObject("Scripting.Dictionary")
     
     BelTempFileNum = FreeFile
     Open BeltempFile For Input As #BelTempFileNum
@@ -267,29 +267,29 @@ Private Sub WriteToScriptFiles(ByVal row As Long, ByVal scenarioName As String, 
     Strain_neg_directory = shtScriptUsfos.Range("W1") & "\strain_neg.exe"
     fahtsExe = shtScriptUsfos.Range("W2")
 
-'    ' Write commands to USFOS script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
-'    fileNum = FreeFile()
-'    Open UsfosScriptText For Append As #fileNum
-'    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-'    Print #fileNum, STRASPAS & Usfos_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_usfos.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\usfos_input.inp" & STRASPAS
-'    Print #fileNum, "::"
-'    Close #fileNum
-'
-'    ' Write commands to STRAIN script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
-'    fileNum = FreeFile()
-'    Open StrainScriptText For Append As #fileNum
-'    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-'    Print #fileNum, STRASPAS & Strain_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_input.inp" & STRASPAS
-'    Print #fileNum, "::"
-'    Close #fileNum
-'
-'    ' Write commands to STRAIN Neg script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
-'    fileNum = FreeFile()
-'    Open StrainNegScriptText For Append As #fileNum
-'    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-'    Print #fileNum, STRASPAS & Strain_neg_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain_neg.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_neg_input.inp" & STRASPAS
-'    Print #fileNum, "::"
-'    Close #fileNum
+    ' Write commands to USFOS script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
+    fileNum = FreeFile()
+    Open UsfosScriptText For Append As #fileNum
+    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
+    Print #fileNum, STRASPAS & Usfos_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_usfos.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\usfos_input.inp" & STRASPAS
+    Print #fileNum, "::"
+    Close #fileNum
+
+    ' Write commands to STRAIN script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
+    fileNum = FreeFile()
+    Open StrainScriptText For Append As #fileNum
+    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
+    Print #fileNum, STRASPAS & Strain_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_input.inp" & STRASPAS
+    Print #fileNum, "::"
+    Close #fileNum
+
+    ' Write commands to STRAIN Neg script file #TODO: CHange this to be called by a single functionpassing just if it is usfos, strain or strain neg
+    fileNum = FreeFile()
+    Open StrainNegScriptText For Append As #fileNum
+    Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
+    Print #fileNum, STRASPAS & Strain_neg_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain_neg.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_neg_input.inp" & STRASPAS
+    Print #fileNum, "::"
+    Close #fileNum
     
     ' Initialize File paths to text and bat fot Script case
     ScriptFileCaseText = CaseFolder & "\script_case.txt"
@@ -369,3 +369,7 @@ Public Function AskToUpdateFormulas(Optional autoAnswerYes As Variant) As Boolea
     resp = MsgBox(msg, vbYesNo + vbQuestion + vbDefaultButton2, "Update Formulas")
     AskToUpdateFormulas = (resp = vbYes)
 End Function
+
+
+
+

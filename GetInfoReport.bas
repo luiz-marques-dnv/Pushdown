@@ -10,6 +10,7 @@ Sub BrowseReportEXCELXML()
         .Title = "Selecione uma Pasta"
         .AllowMultiSelect = False
         .InitialFileName = CURRENT_FOLDER & "\"
+        .Filters.Clear
         .Filters.Add "XML file", "*.xml"
         
         ' put content in link textbox
@@ -318,6 +319,8 @@ Sub TestFindBestMatchingName()
     
     MsgBox "The best matching name is: " & bestName
 End Sub
+
+
 
 
 

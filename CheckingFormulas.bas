@@ -1,8 +1,8 @@
 Option Explicit
 
 Sub PrintColumnsWithFormulaAddresses(Optional ByVal ws As Worksheet, Optional ByVal maxRows As Long = 5, Optional ByVal reportSheetName As String = "Formula Report")
-    ' ws       → sheet to scan (defaults to ActiveSheet)
-    ' maxRows  → how many rows (from row 1 downward) to include in each column
+    ' ws       -> sheet to scan (defaults to ActiveSheet)
+    ' maxRows  -> how many rows (from row 1 downward) to include in each column
     
     If ws Is Nothing Then Set ws = ActiveSheet
     If maxRows < 1 Then Exit Sub
@@ -25,7 +25,7 @@ Sub PrintColumnsWithFormulaAddresses(Optional ByVal ws As Worksheet, Optional By
     
     Dim lastCol As Long, colIdx As Long
     Dim colRange As Range, f As Range, c As Range
-    Dim colLetter As String
+    Dim ColLetter As String
     
     ' Determine last column based on UsedRange
     lastCol = ws.UsedRange.Column + ws.UsedRange.Columns.Count - 1
@@ -39,10 +39,10 @@ Sub PrintColumnsWithFormulaAddresses(Optional ByVal ws As Worksheet, Optional By
         On Error Resume Next
         Set f = colRange.SpecialCells(xlCellTypeFormulas)
         If Err.Number = 0 And Not f Is Nothing Then
-            colLetter = Split(ws.Cells(1, colIdx).Address(False, False), "1")(0)
+            ColLetter = Split(ws.Cells(1, colIdx).Address(False, False), "1")(0)
             
             For Each c In f.Cells
-                rpt.Cells(outRow, 1).Value = colLetter & " (" & colIdx & ")"
+                rpt.Cells(outRow, 1).Value = ColLetter & " (" & colIdx & ")"
                 rpt.Cells(outRow, 2).Value = c.Address(False, False)
                 rpt.Cells(outRow, 3).Value = Mid(c.Formula, 2) ' Remove leading '='
                 rpt.Cells(outRow, 4).Value = ws.Name

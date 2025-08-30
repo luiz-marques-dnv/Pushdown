@@ -79,7 +79,7 @@ End Sub
 
 Function GetFileLastModified(filePath As String) As Date
     Dim FileSystem As Object
-    Dim File As Object
+    Dim file As Object
     
     ' Create a FileSystemObject
     Set FileSystem = CreateObject("Scripting.FileSystemObject")
@@ -87,17 +87,17 @@ Function GetFileLastModified(filePath As String) As Date
     ' Check if the file exists
     If FileSystem.FileExists(filePath) Then
         ' Get the file object
-        Set File = FileSystem.GetFile(filePath)
+        Set file = FileSystem.GetFile(filePath)
         
         ' Return the last modified date and time
-        GetFileLastModified = File.DateLastModified
+        GetFileLastModified = file.DateLastModified
     Else
         ' Return 0 date if file not found
         GetFileLastModified = 0
     End If
     
     ' Clean up
-    Set File = Nothing
+    Set file = Nothing
     Set FileSystem = Nothing
 End Function
 

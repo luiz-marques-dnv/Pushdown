@@ -198,8 +198,8 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
     Dim HighestStrain As Double
     Dim HighestElementStrain As Long
     Dim HighestStrainCriteria As Double
-    Dim ElementsAboveCriteria As Scripting.Dictionary
-    Dim ElementsAbove0Criteria As Scripting.Dictionary
+    Dim ElementsAboveCriteria As Object
+    Dim ElementsAbove0Criteria As Object
     Dim pfpEligibleElement As elementType
     Dim blankElement As elementType
     
@@ -287,7 +287,7 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
     Dim HighestStrain As Double
     Dim HighestElementStrain As Long
     Dim HighestStrainCriteria As Double
-    Dim ElementsAboveCriteria As Scripting.Dictionary
+    Dim ElementsAboveCriteria As Object
     Dim pfpEligibleElement As elementType
     Dim blankElement As elementType
     
@@ -360,7 +360,7 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
     upToTimeMethod = Array(HighestStrainTime, HighestElementStrain)
 End Function
 
-Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strainCriteria) As Scripting.Dictionary
+Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strainCriteria) As Object
     ' Process the strain file (either positive or negative) and returns a dinamic array of elements with number and strain that have a strain above the criteria
     ' It will overwrites the array if high loadcase is found
     
@@ -368,9 +368,9 @@ Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strain
     Dim lineFromFile As String
     Dim elementLine As String
     Dim elementLine_Array() As String
-    Dim elementsStrain As Scripting.Dictionary
+    Dim elementsStrain As Object
 
-    Set elementsStrain = New Scripting.Dictionary
+    Set elementsStrain = CreateObject("Scripting.Dictionary")
 
     strainFile = FreeFile
     
@@ -411,7 +411,7 @@ Private Sub UpdateCompletionStatus(ByVal row As Long, ByVal PFPElement As Long)
     End If
 End Sub
 
-Private Function FindPFPEligibleElement(ByRef elementsStrain As Scripting.Dictionary, ByRef thisScenario As ScenarioType) As elementType
+Private Function FindPFPEligibleElement(ByRef elementsStrain As Object, ByRef thisScenario As ScenarioType) As elementType
     'Verificar se elemento é elegível para receber PFP e retorna o numero do elemento elegível
     Dim test_strain As Long
     Dim element As elementType
@@ -420,8 +420,8 @@ Private Function FindPFPEligibleElement(ByRef elementsStrain As Scripting.Dictio
     
     If elementsStrain.Count > 0 Then
         For i = 0 To elementsStrain.Count - 1
-            element.Number = elementsStrain.Keys(i)
-            element.Strain = elementsStrain.Items(i)
+            element.Number = elementsStrain.Keys()(i)
+            element.Strain = elementsStrain.Items()(i)
             On Error Resume Next
             test_strain = Application.WorksheetFunction.IfNa(WorksheetFunction.VLookup(element.Number, shtGenie.Range("A2:A50000"), 1, False), "N")
             If Err = 0 Then
@@ -1255,5 +1255,10 @@ Sub testCheckErrorInFile()
     
     ' Call the function to check for errors in the file
     checkErrorInFile filePath, scenario
+End Sub
+
+Sub run2()
+Run_fahts_only
+Run_analysis
 End Sub
 

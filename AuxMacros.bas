@@ -162,6 +162,7 @@ Sub BrowseFahtsFileBtn()
         .Title = "Selecione uma Pasta"
         .AllowMultiSelect = False
         .InitialFileName = CURRENT_FOLDER & "\"
+        .Filters.Clear
         .Filters.Add "Exe Files", "*.exe"
         
         ' put content in link textbox
@@ -204,6 +205,7 @@ shtGenie.Range(shtGenie.Cells(2, "A"), shtGenie.Cells(Rows.Count, "D")).ClearCon
 Sheet6.Range(Sheet6.Cells(2, "A"), Sheet6.Cells(Rows.Count, "D")).ClearContents
 Sheet5.Range(Sheet5.Cells(2, "A"), Sheet5.Cells(Rows.Count, "C")).ClearContents
 Sheet7.Range(Sheet7.Cells(2, "A"), Sheet7.Cells(Rows.Count, "K")).ClearContents
+PFP_Rate_Lot.Range(PFP_Rate_Lot.Cells(2, "A"), PFP_Rate_Lot.Cells(Rows.Count, "K")).ClearContents
 
 Clear_PFP
 
@@ -471,6 +473,8 @@ End Sub
 
 
     
+
+
 
 
 
