@@ -1,5 +1,6 @@
 Const STRASPAS As String = """"   'defining aspas to be inside strings
 Const LOG_FILE_NAME As String = "PFP_Analysis_Log.txt"
+Const HEAD_DEFAULT_FILE As String = "\usfos_head_default.fem"
 
 Public checkStrainNegCriteria As Boolean
 Public RunningMETHOD As String
@@ -606,10 +607,11 @@ Private Sub UpdateHeadUsfos(ByRef scenario As ScenarioType, ByVal LoadCaseTime A
 
     
     ' Define the paths to Head file
-    HeadFilename = "usfos_head_" & scenario.Name
-    HeadDefaultFile = scenario.FolderPath & "\" & HeadFilename & "_default.fem"
-    HeadCaseFile = scenario.FolderPath & "\" & HeadFilename & ".fem"
-    
+    HeadDefaultFile = scenario.FolderPath & HEAD_DEFAULT_FILE
+
+    HeadFilename = "usfos_head_" & scenario.Name & ".fem"
+    HeadCaseFile = scenario.FolderPath & "\" & HeadFilename
+
     ' Copy and modify head file
     Set FSObject = CreateObject("Scripting.FileSystemObject")
     FSObject.CopyFile HeadDefaultFile, HeadCaseFile, True

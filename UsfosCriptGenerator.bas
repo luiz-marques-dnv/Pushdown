@@ -15,27 +15,21 @@ Sub GerarHeadfiles_usfos()
     ' Initialize Current Folder and check programs
     AuxMacros.setCurrentFolder
     AuxMacros.CheckPrograms
-    
-
-    InitializeDefaults
 
     ' Asks the user if they want to only update files or if they want to update the formulas of the worksheet
     ' Update formulas is only necessary when the number of scenarios or FEM elements has changed
     response = AskToUpdateFormulas()
 
-    If response Then
-    ApplyFormulas.BuildFormulaBlocks_AllScenarios
-    End If
+    InitializeDefaults
 
+   scriptUsfos = "script_rodar_USFOS"
+   scriptStrain = "script_rodar_STRAIN"
+   scriptStrainNeg = "script_rodar_STRAIN_neg"
 
-'    scriptUsfos = "script_rodar_USFOS"
-'    scriptStrain = "script_rodar_STRAIN"
-'    scriptStrainNeg = "script_rodar_STRAIN_neg"
-'
-'    ' Creating Script files for Usfos, Strain and Strain neg as txt
-'    ScriptsHandling.CreateScriptFiles commandName:="USFOS", ScriptName:=scriptUsfos
-'    ScriptsHandling.CreateScriptFiles commandName:="STRAIN", ScriptName:=scriptStrain
-'    ScriptsHandling.CreateScriptFiles commandName:="STRAIN NEG", ScriptName:=scriptStrainNeg
+   ' Creating Script files for Usfos, Strain and Strain neg as txt
+   ScriptsHandling.CreateScriptFiles commandName:="USFOS", ScriptName:=scriptUsfos
+   ScriptsHandling.CreateScriptFiles commandName:="STRAIN", ScriptName:=scriptStrain
+   ScriptsHandling.CreateScriptFiles commandName:="STRAIN NEG", ScriptName:=scriptStrainNeg
   
     ultimaLinha = shtScriptFaths.Cells(Rows.Count, "A").End(xlUp).row
     For row = 2 To ultimaLinha
@@ -45,10 +39,15 @@ Sub GerarHeadfiles_usfos()
         End If
     Next row
 
-'    'Renaming scripts from txt to bat
-'    ScriptsHandling.FinalizeScripts ScriptName:=scriptUsfos
-'    ScriptsHandling.FinalizeScripts ScriptName:=scriptStrain
-'    ScriptsHandling.FinalizeScripts ScriptName:=scriptStrainNeg
+   'Renaming scripts from txt to bat
+   ScriptsHandling.FinalizeScripts ScriptName:=scriptUsfos
+   ScriptsHandling.FinalizeScripts ScriptName:=scriptStrain
+   ScriptsHandling.FinalizeScripts ScriptName:=scriptStrainNeg
+
+
+    If response Then
+    ApplyFormulas.BuildFormulaBlocks_AllScenarios
+    End If
 
     MsgBox "Script and input files generated!"
     
@@ -197,13 +196,19 @@ Private Sub UpdateHeadUsfos(ByVal row As Long, ByVal LoadCaseTime As String)
     scenarioName = shtScriptUsfos.Cells(row, "B")
     caseFolderPath = CURRENT_FOLDER & "\" & shtScriptUsfos.Cells(row, "A") & "_" & scenarioName
 
-    ' Define the paths to Head and Beltemp files
+    ' Define the paths to Head
     HeadFilename = "usfos_head_" & scenarioName
     HeadDefaultFile = CURRENT_FOLDER & HEAD_DEFAULT_FILE
+
+    ' Define the paths to Head for specific Case
+    HeadCaseDefaultFile = caseFolderPath & HEAD_DEFAULT_FILE
     HeadCaseFile = caseFolderPath & "\" & HeadFilename & ".fem"
+
+    ' Copy Head File Default to Case (No modifications)
+    Set FSObject = CreateObject("Scripting.FileSystemObject")
+    FSObject.CopyFile HeadDefaultFile, HeadCaseDefaultFile, True
     
     ' Copy and modify head file
-    Set FSObject = CreateObject("Scripting.FileSystemObject")
     FSObject.CopyFile HeadDefaultFile, HeadCaseFile, True
     
     ' Update the head file
