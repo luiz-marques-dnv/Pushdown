@@ -87,8 +87,8 @@ Private Sub ProcessCase(ByVal row As Long)
     shtScriptUsfos.Cells(row, "B") = shtScriptFaths.Cells(row, "B")  'Case Name
     shtScriptUsfos.Cells(row, "C") = shtScriptFaths.Cells(row, "C")  'End Time
     
-    If shtScriptUsfos.Cells(row, "I") = "" Then shtScriptUsfos.Cells(row, "I") = shtScriptUsfos.Cells(20, "W") ' Strain Criteria
-    If shtScriptUsfos.Cells(row, "R") = "" Then shtScriptUsfos.Cells(row, "R") = shtScriptUsfos.Cells(23, "W") ' Factor Termal Loads
+    shtScriptUsfos.Cells(row, "I") = shtScriptUsfos.Cells(20, "W") ' Strain Criteria
+    shtScriptUsfos.Cells(row, "R") = shtScriptUsfos.Cells(23, "W") ' Factor Termal Loads
     
     ' Initialize values from the sheet
     ScriptsHandling.InitializeCaseValues row, scenarioName, CaseFolder, ModelFileName, BeltempFilename, fire, HeadFilename, InputFile 'TODO: Change this to a function

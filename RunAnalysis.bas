@@ -349,12 +349,12 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         pfpEligibleElement = blankElement
 
         ' Check if any error happened in USFOS analysis
-        errorFound = checkErrorInFile(thisScenario.FileUsfosOut, thisScenario)
+        errorMessage = checkErrorInFile(thisScenario.FileUsfosOut, thisScenario)
 
-        If errorFound Then
+        If errorMessage <> "" Then
             HighestStrainTime = 0
             HighestElementStrain = 0
-            handleError thisScenario.FileUsfosOut, thisScenario
+            handleError thisScenario.FileUsfosOut, thisScenario, errorMessage
         End If
 
     upToTimeMethod = Array(HighestStrainTime, HighestElementStrain)
@@ -1193,40 +1193,43 @@ Private Sub LogError(ByVal errorMessage As String, ByRef scenario As ScenarioTyp
     WriteToLogFile "ERROR: " & errorMessage & " - Scenario " & scenario.Number & ": " & scenario.Name & _
                    " at Iteration: " & scenario.Iteration
 End Sub
-
+  
 
 Private Function checkErrorInFile(ByVal filePath As String, ByRef scenario As ScenarioType)
     Dim fileContent As String
     Dim line As String
     Dim lineNumber As Long
-    Dim errorFound As Boolean
+    Dim errorMessage As String
     Dim fileNumber As Integer
 
     fileNumber = FreeFile
     Open filePath For Input As #fileNumber
 
     lineNumber = 0
-    errorFound = False
+    errorMessage = ""
 
     Do While Not EOF(fileNumber)
         Line Input #fileNumber, line
         lineNumber = lineNumber + 1
 
         ' Check for specific error patterns in the line
+        ' Check for "ERROR" keyword
         If InStr(UCase(line), "ERROR") > 0 Then
-            errorFound = True
+            errorMessage = "Error found"
+            Exit Do
+        ElseIf InStr(UCase(line), "F R A C T U R E                 F A I L U R E") > 0 Then
+            errorMessage = "Fracture Failure"
             Exit Do
         End If
     Loop
 
     Close #fileNumber
 
-    checkErrorInFile = errorFound
+    checkErrorInFile = errorMessage
 End Function
 
-Sub handleError(filePath As String, ByRef scenario As ScenarioType)
+Sub handleError(filePath As String, ByRef scenario As ScenarioType, Optional ByVal errorMessage As String)
     ' Handle error scenario
-    errorMessage = "ERROR found in file: " & filePath
     LogError errorMessage, scenario
     
     ' Write error in column U
@@ -1261,6 +1264,8 @@ Sub run2()
 Run_fahts_only
 Run_analysis
 End Sub
+
+
 
 
 
