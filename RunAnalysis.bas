@@ -1223,10 +1223,48 @@ Private Function checkErrorInFile(ByVal filePath As String, ByRef scenario As Sc
         End If
     Loop
 
+    ' Check if the analysis did not support expected max load
+    maxLoadSupported = 1 'TODO: Change this to read this result from the output file
+    searchString = "New load level"
+
+    lastLoadLevelLine = readLineWith(filePath, searchString)
+    If lastLoadLevelLine <> "" Then
+        lastLoadLevelValue = CDbl(Split(lastLoadLevelLine, "=")(1))
+
+        If lastLoadLevelValue < maxLoadSupported Then
+            errorMessage = "Analysis reached max " & lastLoadLevelValue & " load " & "but max load should be " & maxLoadSupported
+        End If
+    End If
+
     Close #fileNumber
 
     checkErrorInFile = errorMessage
 End Function
+
+
+Private Function readLineWith(ByVal filePath As String, ByVal searchString As String) As String
+    Dim fileContent As String
+    Dim line As String
+    Dim fileNumber As Integer
+
+    fileNumber = FreeFile
+    Open filePath For Input As #fileNumber
+    
+    readLineWith = ""
+
+    Do While Not EOF(fileNumber)
+        Line Input #fileNumber, line
+        If InStr(line, searchString) > 0 Then
+            readLineWith = line
+        End If
+    Loop
+
+    Close #fileNumber
+    readLineWith = readLineWith
+End Function
+
+
+
 
 Sub handleError(filePath As String, ByRef scenario As ScenarioType, Optional ByVal errorMessage As String)
     ' Handle error scenario
@@ -1241,24 +1279,6 @@ Sub LogElement(ByVal elementNumber As Long, ByRef scenario As ScenarioType)
                    " at Iteration: " & scenario.Iteration
 End Sub
 
-Sub testCheckErrorInFile()
-    Dim scenario As ScenarioType
-    Dim filePath As String
-    
-    ' Initialize a test scenario
-    scenario.Number = 21
-    scenario.Name = "TestScenario"
-    scenario.Iteration = 1
-    scenario.FolderPath = "D:\LUIMAR\SBM\TS063\Teste_AtTime_UptoTime\Automatizado_Planilha_UpToTime\21_L06_seg_TS063_L_Pool_P1_tests"
-    
-    ' Set the file path to check
-    filePath = scenario.FolderPath & "\L06_seg_TS063_L_Pool_P1_usfos_output.out"
-    
-    CURRENT_FOLDER = "D:\LUIMAR\SBM\TS063\Teste_AtTime_UptoTime"
-    
-    ' Call the function to check for errors in the file
-    checkErrorInFile filePath, scenario
-End Sub
 
 Sub run2()
 Run_fahts_only

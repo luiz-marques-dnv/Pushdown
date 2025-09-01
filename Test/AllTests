@@ -178,3 +178,40 @@ Sub test_get_elements_from_head_file()
     TurnOnCalcs
     
 End Sub
+
+
+Sub testReadLineWith()
+    Dim filePath As String
+    Dim searchString As String
+    Dim result As String
+    
+    filePath = "C:\Users\luimar\Desktop\_Bancada\Pushdown\CenariosTeste\TS063 SBM\21_L06_seg_TS063_L_Pool_P1\L06_seg_TS063_L_Pool_P1_usfos_output2.out"
+    searchString = "New load level"
+    
+    result = readLineWith(filePath, searchString)
+    
+    If result <> "" Then
+        MsgBox "Found line: " & result
+    Else
+        MsgBox "No line found containing: " & searchString
+    End If
+End Sub
+
+Sub testCheckErrorInFile()
+    Dim scenario As ScenarioType
+    Dim filePath As String
+    
+    ' Initialize a test scenario
+    scenario.Number = 21
+    scenario.Name = "TestScenario"
+    scenario.Iteration = 1
+    scenario.FolderPath = "D:\LUIMAR\SBM\TS063\Teste_AtTime_UptoTime\Automatizado_Planilha_UpToTime\21_L06_seg_TS063_L_Pool_P1_tests"
+    
+    ' Set the file path to check
+    filePath = scenario.FolderPath & "\L06_seg_TS063_L_Pool_P1_usfos_output.out"
+    
+    CURRENT_FOLDER = "D:\LUIMAR\SBM\TS063\Teste_AtTime_UptoTime"
+    
+    ' Call the function to check for errors in the file
+    checkErrorInFile filePath, scenario
+End Sub
