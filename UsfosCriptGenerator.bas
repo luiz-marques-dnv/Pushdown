@@ -2,6 +2,8 @@ Const SCRIPT_DIR As String = "\script_rodar_"
 Const STRASPAS As String = """"   'defining aspas to be inside strings
 Const HEAD_DEFAULT_FILE As String = "\usfos_head_default.fem"
 
+Public pushDownMethod As String
+
 Sub GerarHeadfiles_usfos()
     TurnOffCalcs
     
@@ -15,6 +17,9 @@ Sub GerarHeadfiles_usfos()
     ' Initialize Current Folder and check programs
     AuxMacros.setCurrentFolder
     AuxMacros.CheckPrograms
+
+    ' Set the pushDownMethod based on the configuration
+    pushDownMethod = Worksheets("Config").Range("A2").Value ' "AtTime" or "UpToTime"
 
     ' Asks the user if they want to only update files or if they want to update the formulas of the worksheet
     ' Update formulas is only necessary when the number of scenarios or FEM elements has changed
@@ -101,7 +106,7 @@ Private Sub ProcessCase(ByVal row As Long)
     
     
     ' Copy and modify head file
-    UpdateHeadUsfos row, LastLoadCase
+    UpdateHeadUsfos row, LastLoadCase, pushDownMethod
 
     ' Copy and modify model file
     ModelFile = ModelFileName & ".fem"
@@ -180,7 +185,7 @@ Private Function DetermineFireDuration(ByVal fireType As String, ByVal exposureT
     End If
 End Function
 
-Private Sub UpdateHeadUsfos(ByVal row As Long, ByVal LoadCaseTime As String)
+Private Sub UpdateHeadUsfos(ByVal row As Long, ByVal LoadCaseTime As String, ByVal pushDownMethod As String)
     ' Updates the Head USFOS file for each row in the specified range.
     ' TODO: CHange the fucntion to receive the files path and not the row
     Dim scenarioName As String
@@ -210,6 +215,17 @@ Private Sub UpdateHeadUsfos(ByVal row As Long, ByVal LoadCaseTime As String)
     
     ' Copy and modify head file
     FSObject.CopyFile HeadDefaultFile, HeadCaseFile, True
+
+      ' Update the head file
+    If pushDownMethod = "UpToTime" Then
+        RunAnalisys.ModifyHeadFileUpToTime headFile:=HeadCaseFile, LoadCaseTime:=LoadCaseTime
+    ElseIf pushDownMethod = "AtTime" Then
+        RunAnalisys.ModifyHeadFileAtTime headFile:=HeadCaseFile, LoadCaseTime:=LoadCaseTime
+    Else
+        ' Handle other methods if needed
+        ' TODO: Implement handling for other methods
+        MsgBox "Unhandled method: " & pushDownMethod
+    End If
     
     ' Update the head file
     ModifyHeadFile headFile:=HeadCaseFile, LoadCaseTime:=LoadCaseTime
@@ -234,6 +250,7 @@ Private Sub ModifyHeadFile(ByVal headFile As String, ByVal LoadCaseTime As Doubl
     Print #HeadFileHandle, HeadFileContent
     Close #HeadFileHandle
 End Sub
+
 Private Sub CreateInputFile(ByVal InputFile As String, ByVal HeadFilename As String, ByVal ModelFileName As String, ByVal BeltempFilename As String, ByVal scenarioName As String)
 Dim InputFileNum As Long
 
@@ -369,6 +386,10 @@ Public Function AskToUpdateFormulas(Optional autoAnswerYes As Variant) As Boolea
     resp = MsgBox(msg, vbYesNo + vbQuestion + vbDefaultButton2, "Update Formulas")
     AskToUpdateFormulas = (resp = vbYes)
 End Function
+
+
+
+
 
 
 

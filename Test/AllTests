@@ -165,7 +165,7 @@ Sub test_get_elements_from_head_file()
     
     'headFile = "C:\Users\LUIMAR\Desktop\aa.txt"
     
-    headFile = "C:\Users\LUIMAR\Desktop\head_L24P_S2.fem"
+    headFile = "D:\LUIMAR\SBM\TS076\Test1.0\12_L04_seg_TS076_L_Jet_W3\head_L04_seg_TS076_L_Jet_W3.fem"
     
     Set allElements = GetElementsfromHeadFile(headFile, "All Elements")
     

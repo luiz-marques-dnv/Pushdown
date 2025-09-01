@@ -3,7 +3,7 @@ Const LOG_FILE_NAME As String = "PFP_Analysis_Log.txt"
 Const HEAD_DEFAULT_FILE As String = "\usfos_head_default.fem"
 
 Public checkStrainNegCriteria As Boolean
-Public RunningMETHOD As String
+Public pushDownMethod As String
 
 Type ScenarioType
     Name As String
@@ -39,7 +39,7 @@ Sub Run_analysis()
     checkStrainNegCriteria = shtScriptUsfos.Range("W32").Value
 
     ' TODO: CHange this to a config module
-    RunningMETHOD = Worksheets("Config").Range("A2").Value ' "HighestStrainMethod" or "UpToTimeMethod"
+    pushDownMethod = Worksheets("Config").Range("A2").Value ' "AtTime" or "UpToTime"
 
     ' Main processing loop
     For row = 2 To ultimaLinha
@@ -89,7 +89,7 @@ Private Sub ProcessIteration(iter As Long, row As Long)
     Set loadCaseData = ExtractLoadCaseData(thisScenario.BeltempFilePath)
 
     ' Get desired load case time based on desired method
-    methodOutput = GetMethodOutputs(loadCaseData, thisScenario, RunningMETHOD)
+    methodOutput = GetMethodOutputs(loadCaseData, thisScenario, pushDownMethod)
 
     ' Getting outputs depending on method
     HighestStrainTime = methodOutput(0)
@@ -176,12 +176,12 @@ Private Function GetMethodOutputs(ByVal loadCaseData As Collection, ByRef thisSc
     ' Get the load case time based on the desired method
     
     Select Case method
-        Case "HighestStrainMethod"
+        Case "AtTime"
             MethodsOutput = HighestStrainMethod(loadCaseData, thisScenario)
     End Select
 
     Select Case method
-        Case "UpToTimeMethod"
+        Case "UpToTime"
             MethodsOutput = upToTimeMethod(loadCaseData, thisScenario)
     End Select
     
@@ -212,7 +212,7 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
         LoadCaseTime = loadCaseTimeDetails(1)
 
         ' Update Head USFOS file
-        UpdateHeadUsfos thisScenario, LoadCaseTime, "AtTime"
+        UpdateHeadUsfos thisScenario, LoadCaseTime, pushDownMethod
 
         ' Running Usfos
         ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
@@ -302,7 +302,7 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
     End If
 
         ' Update Head USFOS file
-        UpdateHeadUsfos thisScenario, LoadCaseTime, "UpToTime"
+        UpdateHeadUsfos thisScenario, LoadCaseTime, pushDownMethod
 
         ' Running Usfos
         ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
@@ -901,7 +901,7 @@ Private Function GetNextLoadCaseTime(ByVal loadCaseData As Collection, ByVal las
 
 End Function
 
-Private Sub ModifyHeadFileAtTime(ByVal headFile As String, ByVal LoadCaseTime As Double)
+Sub ModifyHeadFileAtTime(ByVal headFile As String, ByVal LoadCaseTime As Double)
     ' Modify the head file based on the case information
     Dim HeadFileHandle As Long
     
@@ -920,7 +920,7 @@ Private Sub ModifyHeadFileAtTime(ByVal headFile As String, ByVal LoadCaseTime As
     Close #HeadFileHandle
 End Sub
 
-Private Sub ModifyHeadFileUpToTime(ByVal headFile As String, ByVal LoadCaseTime As Double)
+Sub ModifyHeadFileUpToTime(ByVal headFile As String, ByVal LoadCaseTime As Double)
     ' Modify the head file based on the case information
     Dim HeadFileHandle As Long
     
@@ -1261,4 +1261,6 @@ Sub run2()
 Run_fahts_only
 Run_analysis
 End Sub
+
+
 
