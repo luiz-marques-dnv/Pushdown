@@ -4,6 +4,8 @@ Const HEAD_DEFAULT_FILE As String = "\usfos_head_default.fem"
 
 Public checkStrainNegCriteria As Boolean
 Public pushDownMethod As String
+Public ByPassErrors As Boolean
+Public maxLoadSupportedInput As Double
 
 Type ScenarioType
     Name As String
@@ -40,6 +42,8 @@ Sub Run_analysis()
 
     ' TODO: CHange this to a config module
     pushDownMethod = Worksheets("Config").Range("A2").Value ' "AtTime" or "UpToTime"
+    ByPassErrors = shtScriptUsfos.Range("Y26").Value
+    maxLoadSupportedInput = shtScriptUsfos.Range("Y29").Value ' ratio
 
     ' Main processing loop
     For row = 2 To ultimaLinha
@@ -352,8 +356,11 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         errorMessage = checkErrorInFile(thisScenario.FileUsfosOut, thisScenario)
 
         If errorMessage <> "" Then
-            HighestStrainTime = 0
-            HighestElementStrain = 0
+            if Not ByPassErrors Then
+                HighestStrainTime = 0
+                HighestElementStrain = 0
+            End If
+            ' Log the error
             handleError thisScenario.FileUsfosOut, thisScenario, errorMessage
         End If
 
@@ -1201,6 +1208,7 @@ Private Function checkErrorInFile(ByVal filePath As String, ByRef scenario As Sc
     Dim lineNumber As Long
     Dim errorMessage As String
     Dim fileNumber As Integer
+    Dim maxLoadSupported As Double
 
     fileNumber = FreeFile
     Open filePath For Input As #fileNumber
@@ -1224,7 +1232,7 @@ Private Function checkErrorInFile(ByVal filePath As String, ByRef scenario As Sc
     Loop
 
     ' Check if the analysis did not support expected max load
-    maxLoadSupported = 1 'TODO: Change this to read this result from the output file
+    maxLoadSupported = maxLoadSupportedInput 'TODO: Change this to read this result from the output file
     searchString = "New load level"
 
     lastLoadLevelLine = readLineWith(filePath, searchString)
