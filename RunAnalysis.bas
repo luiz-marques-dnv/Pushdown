@@ -6,6 +6,7 @@ Public checkStrainNegCriteria As Boolean
 Public pushDownMethod As String
 Public ByPassErrors As Boolean
 Public maxLoadSupportedInput As Double
+Public screeningOrDetailed As String
 
 Type ScenarioType
     Name As String
@@ -44,6 +45,7 @@ Sub Run_analysis()
     pushDownMethod = Worksheets("Config").Range("A2").Value ' "AtTime" or "UpToTime"
     ByPassErrors = shtScriptUsfos.Range("Y26").Value
     maxLoadSupportedInput = shtScriptUsfos.Range("Y29").Value ' ratio
+    screeningOrDetailed = shtScriptUsfos.Range("W29").Value ' True for screening, False for detailed
 
     ' Main processing loop
     For row = 2 To ultimaLinha
@@ -95,9 +97,24 @@ Private Sub ProcessIteration(iter As Long, row As Long)
     ' Get desired load case time based on desired method
     methodOutput = GetMethodOutputs(loadCaseData, thisScenario, pushDownMethod)
 
+    ' if first iteration, copy the first run files
+    If iter = 1 Then
+        CopyFirstRunFiles thisScenario
+    End If
+
     ' Getting outputs depending on method
     HighestStrainTime = methodOutput(0)
     PFPElement = methodOutput(1)
+
+    ' Checking Screening or Detailed
+    If screeningOrDetailed = "Screening PFP Phase" Then
+        ' Apply screening criteria. For now only places PFP Element as 0 to stop analysis
+        ' TODO: Change this to proper handle when analysis should stop
+        HighestStrainTime = 0
+        PFPElement = 0
+    ElseIf screeningOrDetailed = "Detailed PFP Phase" Then
+        ' Apply detailed criteria. For now nothing happens, continue as normal
+    End If
 
     ' Apply PFP on eligible element
     If PFPElement <> 0 Then
@@ -636,38 +653,29 @@ Private Sub UpdateHeadUsfos(ByRef scenario As ScenarioType, ByVal LoadCaseTime A
 
 End Sub
 
-Private Sub CopyFirstRunFiles(ByVal ultimaLinha As Long)
+Private Sub CopyFirstRunFiles(ByRef scenario As ScenarioType)
     ' Copies files from the first USFOS run to a designated folder.
-    Dim row As Long
-    Dim scenarioName As String
-    Dim caseFolderPath As String
     Dim firstRunFolderPath As String
-    Dim sourcePath As String
-    
-    For row = 2 To ultimaLinha
-        ' Get the case name and create the case folder path
-        scenarioName = shtScriptUsfos.Cells(row, "B")
-        caseFolderPath = CURRENT_FOLDER & "\" & shtScriptUsfos.Cells(row, "A") & "_" & scenarioName
-        
-        ' Create the folder path for the first run
-        firstRunFolderPath = caseFolderPath & "\" & scenarioName & "_FirstRun"
-        
-        ' Create a directory for the first run if it doesn't exist
-        If Dir(firstRunFolderPath, vbDirectory) = "" Then ' Check if the directory already exists
-            On Error Resume Next
-            MkDir firstRunFolderPath
-            On Error GoTo 0
-        End If
 
-        ' Copy files from the case folder to the first run folder
-        ' TODO: CHange the way this is called so it does not have to put scenarioName
-        CopyCaseFile caseFolderPath, firstRunFolderPath, scenarioName & "_usfos_output.out"
-        CopyCaseFile caseFolderPath, firstRunFolderPath, scenarioName & "_usfos_output.raf"
-        CopyCaseFile caseFolderPath, firstRunFolderPath, scenarioName & "_usfos.trm"
-        CopyCaseFile caseFolderPath, firstRunFolderPath, scenarioName & "_usfos_output_status.text"
-        CopyCaseFile caseFolderPath, firstRunFolderPath, scenarioName & "_strain_output"
-        CopyCaseFile caseFolderPath, firstRunFolderPath, scenarioName & "_output.raf"
-    Next row
+    ' Create the folder path for the first run
+    firstRunFolderPath = scenario.FolderPath & "\" & scenario.Name & "_FirstRun"
+    
+    ' Create a directory for the first run if it doesn't exist
+    If Dir(firstRunFolderPath, vbDirectory) = "" Then ' Check if the directory already exists
+        On Error Resume Next
+        MkDir firstRunFolderPath
+        On Error GoTo 0
+    End If
+
+    ' Copy files from the case folder to the first run folder
+    ' TODO: CHange the way this is called so it does not have to put scenarioName
+    CopyCaseFile scenario.FolderPath, firstRunFolderPath, scenario.Name & "_usfos_output.out"
+    CopyCaseFile scenario.FolderPath, firstRunFolderPath, scenario.Name & "_usfos_output.raf"
+    CopyCaseFile scenario.FolderPath, firstRunFolderPath, scenario.Name & "_usfos.trm"
+    CopyCaseFile scenario.FolderPath, firstRunFolderPath, scenario.Name & "_usfos_output_status.text"
+    CopyCaseFile scenario.FolderPath, firstRunFolderPath, scenario.Name & "_strain_output"
+    CopyCaseFile scenario.FolderPath, firstRunFolderPath, scenario.Name & "_output.raf"
+
 End Sub
 
 Private Sub ExecuteShellCommand(ByVal command As String)
