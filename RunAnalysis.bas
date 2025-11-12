@@ -360,11 +360,6 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
             HighestStrainTime = LoadCaseTime
         End If
 
-        'Copying starin files just to check    TODO: Delete after checking
-        CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
-
-        ' Copying Status files just to check buckling    TODO: Delete after checking
-        CopyStatusFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
         
         ' Reset Eligible Element to default values
         pfpEligibleElement = blankElement
@@ -379,7 +374,16 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
             End If
             ' Log the error
             handleError thisScenario.FileUsfosOut, thisScenario, errorMessage
+        ElseIf errorMessage = "" Then
+            'Copying starin files just to check    TODO: Delete after checking
+            CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
+
+            ' Copying Status files just to check buckling    TODO: Delete after checking
+            CopyStatusFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
+            
+        
         End If
+
 
     upToTimeMethod = Array(HighestStrainTime, HighestElementStrain)
 End Function
@@ -1300,8 +1304,5 @@ Sub run2()
 Run_fahts_only
 Run_analysis
 End Sub
-
-
-
 
 

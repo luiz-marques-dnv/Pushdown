@@ -288,7 +288,7 @@ Private Sub WriteToScriptFiles(ByVal row As Long, ByVal scenarioName As String, 
     fileNum = FreeFile()
     Open UsfosScriptText For Append As #fileNum
     Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #fileNum, STRASPAS & Usfos_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_usfos.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\usfos_input.inp" & STRASPAS
+    Print #fileNum, STRASPAS & Usfos_directory & STRASPAS; " 2000 > " & STRASPAS & scenarioName & "_usfos.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\usfos_input.inp" & STRASPAS
     Print #fileNum, "::"
     Close #fileNum
 
@@ -296,7 +296,7 @@ Private Sub WriteToScriptFiles(ByVal row As Long, ByVal scenarioName As String, 
     fileNum = FreeFile()
     Open StrainScriptText For Append As #fileNum
     Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #fileNum, STRASPAS & Strain_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_input.inp" & STRASPAS
+    Print #fileNum, STRASPAS & Strain_directory & STRASPAS; " 2000 > " & STRASPAS & scenarioName & "_strain.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_input.inp" & STRASPAS
     Print #fileNum, "::"
     Close #fileNum
 
@@ -304,7 +304,7 @@ Private Sub WriteToScriptFiles(ByVal row As Long, ByVal scenarioName As String, 
     fileNum = FreeFile()
     Open StrainNegScriptText For Append As #fileNum
     Print #fileNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #fileNum, STRASPAS & Strain_neg_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain_neg.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_neg_input.inp" & STRASPAS
+    Print #fileNum, STRASPAS & Strain_neg_directory & STRASPAS; " 2000 > " & STRASPAS & scenarioName & "_strain_neg.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_neg_input.inp" & STRASPAS
     Print #fileNum, "::"
     Close #fileNum
     
@@ -321,16 +321,16 @@ Private Sub WriteToScriptFiles(ByVal row As Long, ByVal scenarioName As String, 
     Print #ScriptFileCaseNum, "cd .."
     Print #ScriptFileCaseNum, ":::: Shell to start USFOS run"
     Print #ScriptFileCaseNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #ScriptFileCaseNum, STRASPAS & Usfos_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_usfos.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\usfos_input.inp" & STRASPAS
+    Print #ScriptFileCaseNum, STRASPAS & Usfos_directory & STRASPAS; " 2000 > " & STRASPAS & scenarioName & "_usfos.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\usfos_input.inp" & STRASPAS
     Print #ScriptFileCaseNum, "::"
     Print #ScriptFileCaseNum, ":::: Shell to start STRAIN run"
     Print #ScriptFileCaseNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #ScriptFileCaseNum, STRASPAS & Strain_directory & STRASPAS; STRASPAS & scenarioName & "_strain.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_input.inp" & STRASPAS
+    Print #ScriptFileCaseNum, STRASPAS & Strain_directory & STRASPAS; " 2000 > " & STRASPAS & scenarioName & "_strain.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_input.inp" & STRASPAS
 
     Print #ScriptFileCaseNum, "::"
     Print #ScriptFileCaseNum, ":::: Shell to start STRAIN neg run"
     Print #ScriptFileCaseNum, "cd " & Drive & STRASPAS & CaseFolder & STRASPAS
-    Print #ScriptFileCaseNum, STRASPAS & Strain_neg_directory & STRASPAS; " 400 > " & STRASPAS & scenarioName & "_strain_neg.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_neg_input.inp" & STRASPAS
+    Print #ScriptFileCaseNum, STRASPAS & Strain_neg_directory & STRASPAS; " 2000 > " & STRASPAS & scenarioName & "_strain_neg.trm" & STRASPAS & " < " & STRASPAS & CaseFolder & "\strain_neg_input.inp" & STRASPAS
     Print #ScriptFileCaseNum, "::"
     Close #ScriptFileCaseNum
     
