@@ -720,24 +720,28 @@ Private Sub ExecuteProgramBackup(ByVal programName As Program, ByVal workingDire
         Case Program.FAHTS
             executable = fahtsExe
             inputFileName = "input.inp"
+            programName = "FAHTS"
 
         Case Program.Usfos
             executable = usfosBin & "\Usfos.exe"
             executionCommand = " 400 > "
             outputFileName = scenarioName & "_usfos.trm"
             inputFileName = "usfos_input.inp"
+            programName = "USFOS"
 
         Case Program.Strain
             executable = usfosBin & "\strain.exe"
             executionCommand = " 400 > "
             outputFileName = scenarioName & "_strain.trm"
             inputFileName = "strain_input.inp"
+            programName = "STRAIN"
 
         Case Program.StrainNeg
             executable = usfosBin & "\strain_neg.exe"
             executionCommand = " 400 > "
             outputFileName = scenarioName & "_strain_neg.trm"
             inputFileName = "strain_neg_input.inp"
+            programName = "STRAIN NEG"
 
         Case Else
             MsgBox "Invalid Program Name when calling ExecuteProgram sub"
@@ -749,8 +753,10 @@ Private Sub ExecuteProgramBackup(ByVal programName As Program, ByVal workingDire
     
     ' Get the start time
     startTime = Timer
-    
+
+    Application.StatusBar = "Running " & programName & " – " & scenarioName
     ExecuteShellCommandHidden fullCommand, workingDirectory
+    Application.StatusBar = False ' Reset status bar
     
     ' Get the end time
     endTime = Timer
