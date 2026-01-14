@@ -60,7 +60,7 @@ Sub GerarHeadfiles_usfos()
 End Sub
 
 Private Sub InitializeDefaults()
-' Initialize strain criteria, Factor Thermal Loads  and Drive
+' Initialize strain criteria, Load Threshold and other default values if empty
     If IsEmpty(shtScriptUsfos.Cells(20, "W")) Then shtScriptUsfos.Cells(20, "W") = 2
     If IsEmpty(shtScriptUsfos.Cells(23, "W")) Then shtScriptUsfos.Cells(23, "W") = 1
     
@@ -88,7 +88,7 @@ Private Sub ProcessCase(ByVal row As Long)
     shtScriptUsfos.Cells(row, "C") = shtScriptFaths.Cells(row, "C")  'End Time
     
     shtScriptUsfos.Cells(row, "I") = shtScriptUsfos.Cells(20, "W") ' Strain Criteria
-    shtScriptUsfos.Cells(row, "R") = shtScriptUsfos.Cells(23, "W") ' Factor Termal Loads
+    shtScriptUsfos.Cells(row, "R") = shtScriptUsfos.Cells(23, "W") ' Load Threshold Ratio
     
     ' Initialize values from the sheet
     ScriptsHandling.InitializeCaseValues row, scenarioName, CaseFolder, ModelFileName, BeltempFilename, fire, HeadFilename, InputFile 'TODO: Change this to a function

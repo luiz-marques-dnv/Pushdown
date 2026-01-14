@@ -18,6 +18,7 @@ Type ScenarioType
     row As Long
     Iteration As Long
     FileUsfosOut As String
+    maxLoadSupported As Double
 End Type
 
 Sub Run_analysis()
@@ -43,7 +44,7 @@ Sub Run_analysis()
     ' TODO: CHange this to a config module
     pushDownMethod = Worksheets("Config").Range("A2").Value ' "AtTime" or "UpToTime"
     ByPassErrors = shtScriptUsfos.Range("Y26").Value
-    maxLoadSupportedInput = shtScriptUsfos.Range("Y29").Value ' ratio
+    maxLoadSupportedInput = shtScriptUsfos.Range("W23").Value ' ratio
 
     ' Main processing loop
     For row = 2 To ultimaLinha
@@ -166,7 +167,7 @@ Function InitScenariosAttributes(ByVal row As Long) As ScenarioType
     thisScenario.Name = shtScriptUsfos.Cells(row, "B")
     thisScenario.Iteration = shtScriptUsfos.Cells(row, "D")
     thisScenario.strainCriteria = shtScriptUsfos.Cells(row, "I")
-
+    thisScenario.maxLoadSupported = shtScriptUsfos.Cells(row, "R")
 
     ' Paths
     thisScenario.FolderPath = CURRENT_FOLDER & "\" & thisScenario.Number & "_" & thisScenario.Name
@@ -1204,18 +1205,18 @@ Sub WriteToLogFile(message As String)
     Close #logFile
 End Sub
 
-Private Sub LogAlreadyProtectedWarning(ByVal elementNumber As Long, ByRef scenario As ScenarioType)
+Private Sub LogAlreadyProtectedWarning(ByVal elementNumber As Long, ByRef thisScenario As ScenarioType)
     WriteToLogFile "WARN: Element " & elementNumber & " (3-sided I) already protected but still above criteria - " & _
-                   "Scenario " & scenario.Number & ": " & scenario.Name & " at Iteration: " & scenario.Iteration
+                   "Scenario " & thisScenario.Number & ": " & thisScenario.Name & " at Iteration: " & thisScenario.Iteration
 End Sub
 
-Private Sub LogError(ByVal errorMessage As String, ByRef scenario As ScenarioType)
-    WriteToLogFile "ERROR: " & errorMessage & " - Scenario " & scenario.Number & ": " & scenario.Name & _
-                   " at Iteration: " & scenario.Iteration
+Private Sub LogError(ByVal errorMessage As String, ByRef thisScenario As ScenarioType)
+    WriteToLogFile "ERROR: " & errorMessage & " - Scenario " & thisScenario.Number & ": " & thisScenario.Name & _
+                   " at Iteration: " & thisScenario.Iteration
 End Sub
   
 
-Private Function checkErrorInFile(ByVal filePath As String, ByRef scenario As ScenarioType)
+Private Function checkErrorInFile(ByVal filePath As String, ByRef thisScenario As ScenarioType)
     Dim fileContent As String
     Dim line As String
     Dim lineNumber As Long
@@ -1245,15 +1246,14 @@ Private Function checkErrorInFile(ByVal filePath As String, ByRef scenario As Sc
     Loop
 
     ' Check if the analysis did not support expected max load
-    maxLoadSupported = maxLoadSupportedInput 'TODO: Change this to read this result from the output file
     searchString = "New load level"
 
     lastLoadLevelLine = readLineWith(filePath, searchString)
     If lastLoadLevelLine <> "" Then
         lastLoadLevelValue = CDbl(Split(lastLoadLevelLine, "=")(1))
 
-        If lastLoadLevelValue < maxLoadSupported Then
-            errorMessage = "Analysis reached max " & lastLoadLevelValue & " load " & "but max load should be " & maxLoadSupported
+        If lastLoadLevelValue < thisScenario.maxLoadSupported Then
+            errorMessage = "Analysis reached " & lastLoadLevelValue & " load " & "but max load should be " & thisScenario.maxLoadSupported
         End If
     End If
 
