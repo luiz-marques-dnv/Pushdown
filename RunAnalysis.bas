@@ -6,7 +6,6 @@ Public checkStrainNegCriteria As Boolean
 Public pushDownMethod As String
 Public ByPassErrors As Boolean
 Public maxLoadSupportedInput As Double
-Public screeningOrDetailed As String
 
 Type ScenarioType
     Name As String
@@ -45,13 +44,12 @@ Sub Run_analysis()
     pushDownMethod = Worksheets("Config").Range("A2").Value ' "AtTime" or "UpToTime"
     ByPassErrors = shtScriptUsfos.Range("Y26").Value
     maxLoadSupportedInput = shtScriptUsfos.Range("Y29").Value ' ratio
-    screeningOrDetailed = shtScriptUsfos.Range("W29").Value ' True for screening, False for detailed
 
     ' Main processing loop
     For row = 2 To ultimaLinha
+        iter = shtScriptUsfos.Cells(row, "D")
         Do Until CriteriaMet(iter, row)
             ' Retrieve iteration number in the worksheet
-            iter = shtScriptUsfos.Cells(row, "D")
             iter = iter + 1
         
             ProcessIteration iter, row
@@ -106,30 +104,22 @@ Private Sub ProcessIteration(iter As Long, row As Long)
     HighestStrainTime = methodOutput(0)
     PFPElement = methodOutput(1)
 
-    ' Checking Screening or Detailed
-    If screeningOrDetailed = "Screening PFP Phase" Then
-        ' Apply screening criteria. For now only places PFP Element as 0 to stop analysis
-        ' TODO: Change this to proper handle when analysis should stop
-        HighestStrainTime = 0
-        PFPElement = 0
-    ElseIf screeningOrDetailed = "Detailed PFP Phase" Then
-        ' Apply detailed criteria. For now nothing happens, continue as normal
-    End If
-
     ' Apply PFP on eligible element
     If PFPElement <> 0 Then
-        ' Write PFP element to the script file
-        writePFPElement row, PFPElement
+        if isDetailedPhase() Then
+                ' Write PFP element to the script file
+            writePFPElement row, PFPElement
 
-        ' Update Fahts for on going cases
-        UpdateHeadFahts thisScenario
+            ' Update Fahts for on going cases
+            UpdateHeadFahts thisScenario
 
-        ' Running Fahts
-        ExecuteProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
+            ' Running Fahts
+            ExecuteProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
 
-        ' Copying Fahts files just to check    TODO: Delete after checking
-        CopyFahtsOutFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration
-
+            ' Copying Fahts files just to check    TODO: Delete after checking
+            CopyFahtsOutFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration
+        End If
+        
         ' Update Completion Status
         shtScriptUsfos.Cells(row, "S") = "on going"
 
@@ -834,8 +824,12 @@ Sub ExecuteProgram(ByVal prog As Program, ByVal workingDirectory As String, ByVa
     
     ' Get the timestamp before running the program
     PreviousTimestamp = ScriptsHandling.GetFileLastModified(OutputCheckPath)
-    
+
+    ' Update status bar and run the program
+    Application.StatusBar = "Running " & programName & " – " & scenarioName
     ExecuteShellCommandHidden fullCommand, workingDirectory
+    Application.StatusBar = False ' Reset status bar
+    
     
     HasFileChanged = CheckFileChange(OutputCheckPath, PreviousTimestamp)
 
@@ -1078,10 +1072,11 @@ Private Function CriteriaMet(ByRef iter As Long, row As Long) As Boolean
     ' Determine if the criteria are met
     ' Return True if criteria are met, False otherwise
     
-    screening = "Screening PFP Phase" = shtScriptUsfos.Range("W29")
-    
-    If iter > 0 And screening Then CriteriaMet = True
-    
+    If isScreeningPhase() and iter > 0 Then
+        CriteriaMet = True
+        Exit Function
+    End If
+
     If iter = 500 Then CriteriaMet = True
 
     If shtScriptUsfos.Cells(row, "S") = "completed" Then CriteriaMet = True
@@ -1304,6 +1299,16 @@ Sub LogElement(ByVal elementNumber As Long, ByRef scenario As ScenarioType)
     WriteToLogFile "INFO: Element " & elementNumber & " protected - Scenario " & scenario.Number & ": " & scenario.Name & _
                    " at Iteration: " & scenario.Iteration
 End Sub
+
+Function isScreeningPhase() As Boolean
+    ' Determine if the current phase is screening phase
+    isScreeningPhase = (shtScriptUsfos.Range("W29").Value = "Screening PFP Phase")
+End Function
+
+Function isDetailedPhase() As Boolean
+    ' Determine if the current phase is detailed phase
+    isDetailedPhase = (shtScriptUsfos.Range("W29").Value = "Detailed PFP Phase")
+End Function
 
 
 Sub run2()
