@@ -100,13 +100,13 @@ Private Sub ProcessCase(ByVal row As Long)
     ' Get info about last load case and last time
     BeltempFilePath = CaseFolder & "\" & BeltempFilename & ".fem"
     Set LastLoadCaseInfo = GetLastLoadCaseInfos(BeltempFilePath)
-    LastLoadCase = LastLoadCaseInfo("load case")                    'last loadcase number
+    lastLoadCaseTime = LastLoadCaseInfo("time")                    'last loadcase time
      
     ProcessFireInfo fire, row, scenarioName
     
     
     ' Copy and modify head file
-    UpdateHeadUsfos row, LastLoadCase, pushDownMethod
+    UpdateHeadUsfos row, lastLoadCaseTime, pushDownMethod
 
     ' Copy and modify model file
     ModelFile = ModelFileName & ".fem"
@@ -386,6 +386,7 @@ Public Function AskToUpdateFormulas(Optional autoAnswerYes As Variant) As Boolea
     resp = MsgBox(msg, vbYesNo + vbQuestion + vbDefaultButton2, "Update Formulas")
     AskToUpdateFormulas = (resp = vbYes)
 End Function
+
 
 
 
