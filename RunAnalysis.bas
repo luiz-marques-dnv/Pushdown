@@ -2,10 +2,13 @@ Const STRASPAS As String = """"   'defining aspas to be inside strings
 Const LOG_FILE_NAME As String = "PFP_Analysis_Log.txt"
 Const HEAD_DEFAULT_FILE As String = "\usfos_head_default.fem"
 
-Public checkStrainNegCriteria As Boolean
 Public pushDownMethod As String
 Public ByPassErrors As Boolean
 Public maxLoadSupportedInput As Double
+Public runUsfosAnalysis As Boolean
+Public runStrainAnalysis As Boolean
+Public runStrainNegAnalysis As Boolean
+Public runFahtsAnalysis As Boolean
 
 Type ScenarioType
     Name As String
@@ -39,7 +42,11 @@ Sub Run_analysis()
     
     ultimaLinha = shtScriptUsfos.Cells(Rows.Count, "A").End(xlUp).row
 
-    checkStrainNegCriteria = shtScriptUsfos.Range("W32").Value
+    ' Check
+    runUsfosAnalysis = shtScriptUsfos.Range("Z29").Value
+    runStrainAnalysis = shtScriptUsfos.Range("Z30").Value
+    runStrainNegAnalysis = shtScriptUsfos.Range("Z31").Value
+    runFahtsAnalysis = shtScriptUsfos.Range("Z32").Value
 
     ' TODO: CHange this to a config module
     pushDownMethod = Worksheets("Config").Range("A2").Value ' "AtTime" or "UpToTime"
@@ -104,21 +111,27 @@ Private Sub ProcessIteration(iter As Long, row As Long)
     ' Getting outputs depending on method
     HighestStrainTime = methodOutput(0)
     PFPElement = methodOutput(1)
+    PFPElementStrain = methodOutput(2)
 
     ' Apply PFP on eligible element
     If PFPElement <> 0 Then
+        ' Update Element Protection Status
+        updateElementProtectionStatus row, PFPElement, PFPElementStrain
+
         if isDetailedPhase() Then
                 ' Write PFP element to the script file
             writePFPElement row, PFPElement
 
-            ' Update Fahts for on going cases
-            UpdateHeadFahts thisScenario
+            if runFahtsAnalysis Then
+                ' Update Fahts for on going cases
+                UpdateHeadFahts thisScenario
 
-            ' Running Fahts
-            ExecuteProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
+                ' Running Fahts
+                ExecuteProgram Program.FAHTS, thisScenario.FolderPath, thisScenario.Name
 
-            ' Copying Fahts files just to check    TODO: Delete after checking
-            CopyFahtsOutFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration
+                ' Copying Fahts files just to check    TODO: Delete after checking
+                CopyFahtsOutFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration
+            End If
         End If
         
         ' Update Completion Status
@@ -223,14 +236,21 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
         loadcase = loadCaseTimeDetails(0)
         LoadCaseTime = loadCaseTimeDetails(1)
 
-        ' Update Head USFOS file
-        UpdateHeadUsfos thisScenario, LoadCaseTime, pushDownMethod
+        If runUsfosAnalysis Then
+            ' Update Head USFOS file
+            UpdateHeadUsfos thisScenario, LoadCaseTime, pushDownMethod
 
-        ' Running Usfos
-        ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
+            ' Running Usfos
+            ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
+        End If
 
-        ' Running strain to get values outside criteria
-        ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
+        If runStrainAnalysis Then
+            ' Running strain to get values outside criteria
+            ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
+
+            'Copying starin files just to check    TODO: Delete after checking
+            CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
+        End If
 
         ' Process positive strain criteria
         Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.strainCriteria)
@@ -239,7 +259,7 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
         pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria, thisScenario)
 
 
-        If checkStrainNegCriteria And pfpEligibleElement.Number = 0 Then
+        If runStrainNegAnalysis And pfpEligibleElement.Number = 0 Then
             ' Running straing neg to get values outside criteria
             ExecuteProgram Program.StrainNeg, thisScenario.FolderPath, thisScenario.Name
 
@@ -276,8 +296,6 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
             HighestStrainTime = LoadCaseTime
         End If
         
-        'Copying starin files just to check    TODO: Delete after checking
-        CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
 
         ' Copying Status files just to check buckling    TODO: Delete after checking
         CopyStatusFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
@@ -286,7 +304,7 @@ Private Function HighestStrainMethod(ByVal loadCaseData As Collection, ByRef thi
         pfpEligibleElement = blankElement
     Next loadCaseTimeDetails
     
-    HighestStrainMethod = Array(HighestStrainTime, HighestElementStrain)
+    HighestStrainMethod = Array(HighestStrainTime, HighestElementStrain, HighestStrain)
 End Function
 
 Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScenario As ScenarioType) As Variant()
@@ -313,14 +331,22 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         LoadCaseTime = loadCaseData(loadCaseData.Count)(1)
     End If
 
-        ' Update Head USFOS file
-        UpdateHeadUsfos thisScenario, LoadCaseTime, pushDownMethod
+        If runUsfosAnalysis Then
+            ' Update Head USFOS file
+            UpdateHeadUsfos thisScenario, LoadCaseTime, pushDownMethod
 
-        ' Running Usfos
-        ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
+            ' Running Usfos
+            ExecuteProgram Program.Usfos, thisScenario.FolderPath, thisScenario.Name
+        End If
 
-        ' Running strain to get values outside criteria
-        ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
+        If runStrainAnalysis Then
+            ' Running strain to get values outside criteria
+            ExecuteProgram Program.Strain, thisScenario.FolderPath, thisScenario.Name
+
+            'Copying starin files just to check    TODO: Delete after checking
+            CopyStrainFiles thisScenario.Name, thisScenario.FolderPath, thisScenario.Iteration, loadcase
+        End If
+
 
         ' Process positive strain criteria
         Set ElementsAboveCriteria = GetElementsAboveCriteriaStrain(thisScenario.FileStrain, thisScenario.strainCriteria)
@@ -329,7 +355,7 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         pfpEligibleElement = FindPFPEligibleElement(ElementsAboveCriteria, thisScenario)
 
 
-        If checkStrainNegCriteria And pfpEligibleElement.Number = 0 Then
+        If runStrainNegAnalysis And pfpEligibleElement.Number = 0 Then
             ' Running straing neg to get values outside criteria
             ExecuteProgram Program.StrainNeg, thisScenario.FolderPath, thisScenario.Name
 
@@ -376,7 +402,7 @@ Private Function upToTimeMethod(ByVal loadCaseData As Collection, ByRef thisScen
         End If
 
 
-    upToTimeMethod = Array(HighestStrainTime, HighestElementStrain)
+    upToTimeMethod = Array(HighestStrainTime, HighestElementStrain, HighestPFPStrain)
 End Function
 
 Private Function GetElementsAboveCriteriaStrain(ByVal filePath As String, strainCriteria) As Object
@@ -484,7 +510,7 @@ Private Sub writePFPElement(ByVal row As Long, ByVal PFPElementNumber As Long)
         thisScenario = InitScenariosAttributes(row)
 
         ' Log the element
-        LogElement PFPElementNumber, thisScenario
+        LogProtectedElement PFPElementNumber, thisScenario
     
     End If
 
@@ -497,7 +523,6 @@ Sub writeAllElement(ByVal row As Long, ByVal PFPElementNumber As Long)
     Dim k As Long
     
 
-    shtScriptUsfos.Cells(row, "T") = "El. " & PFPElementNumber & " above criteria"
     ultlinhaPFP = shtPFP.Cells(Rows.Count, (row - 2) * 5 + 3).End(xlUp).row
     verify = True
     For k = 2 To ultlinhaPFP + 1
@@ -543,6 +568,15 @@ Sub writeI3SidedElement(ByVal row As Long, ByVal PFPElementNumber As Long)
         End If
 
     End If
+End Sub
+
+Sub updateElementProtectionStatus(ByVal row As Long, ByVal PFPElementNumber As Long, ByVal PFPElementStrain As Double)
+    ' Sub to update the element protection status
+
+    shtScriptUsfos.Cells(row, "T") = "El. " & PFPElementNumber & " above criteria with Strain " & PFPElementStrain
+
+    LogElementAboveCriteria PFPElementNumber, InitScenariosAttributes(row), PFPElementStrain
+
 End Sub
 
 Sub writeBox3SidedElement(ByVal row As Long, ByVal PFPElementNumber As Long)
@@ -1216,6 +1250,7 @@ Private Sub LogError(ByVal errorMessage As String, ByRef thisScenario As Scenari
 End Sub
   
 
+
 Private Function checkErrorInFile(ByVal filePath As String, ByRef thisScenario As ScenarioType)
     Dim fileContent As String
     Dim line As String
@@ -1295,9 +1330,19 @@ Sub handleError(filePath As String, ByRef scenario As ScenarioType, Optional ByV
     shtScriptUsfos.Cells(scenario.row, "U").Value = "ERROR"
 End Sub
 
-Sub LogElement(ByVal elementNumber As Long, ByRef scenario As ScenarioType)
+Sub LogElementAboveCriteria(ByVal elementNumber As Long, ByRef scenario As ScenarioType, ByVal StrainValue As Double)
+    WriteToLogFile "INFO: Element " & elementNumber & " above criteria (" & StrainValue & "%) - Scenario " & scenario.Number & ": " & scenario.Name & _
+                   " at Iteration: " & scenario.Iteration
+End Sub
+
+Sub LogProtectedElement(ByVal elementNumber As Long, ByRef scenario As ScenarioType)
     WriteToLogFile "INFO: Element " & elementNumber & " protected - Scenario " & scenario.Number & ": " & scenario.Name & _
                    " at Iteration: " & scenario.Iteration
+End Sub
+
+Private Sub LogInfo(ByVal infoMessage As String, ByRef thisScenario As ScenarioType)
+    WriteToLogFile "INFO: " & infoMessage & " - Scenario " & thisScenario.Number & ": " & thisScenario.Name & _
+                   " at Iteration: " & thisScenario.Iteration
 End Sub
 
 Function isScreeningPhase() As Boolean
