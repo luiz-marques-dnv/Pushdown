@@ -376,9 +376,10 @@ Function getElementsFromString(ByVal fileContent As String, ByVal FAHTSCommand A
     Set elements = New Collection
 
     ' Formating the content trimming blank spaces and replacing linebreaks
+    fileContent = Replace(fileContent, vbTab, " ")
+    fileContent = Replace(fileContent, vbCr, " ")
+    fileContent = Replace(fileContent, vbLf, " ")
     fileContent = WorksheetFunction.Trim(fileContent)
-    fileContent = Replace(fileContent, Chr(13), " ")
-    fileContent = Replace(fileContent, Chr(10), " ")
     
     
     ' Initialize the starting position
@@ -452,6 +453,7 @@ End Function
 Sub WritePFPsToWorksheet(allElements As Collection, IthreeSidedElements As Collection, boxThreeSidedElements As Collection, row As Long)
     Dim element As Variant
     Dim elementNumber As Variant
+    ' TODO: Refactor - This function is not optimized since it traverse for all elements calling the write function everytime
 
     ' Write all elements to the worksheet
     For Each elementNumber In allElements
@@ -472,11 +474,48 @@ Sub WritePFPsToWorksheet(allElements As Collection, IthreeSidedElements As Colle
 End Sub
 
 
-    
+Function formatLinesForUSFOS(ByVal inputString As String, _
+                             Optional ByVal maxLineLen As Long = 90) As String
+    Dim result As String
+    Dim remainingText As String
+    Dim breakPos As Long
+    Dim chunk As String
 
+    ' Normalize whitespace
+    inputString = Replace(inputString, vbTab, " ")
+    inputString = Replace(inputString, vbCr, " ")
+    inputString = Replace(inputString, vbLf, " ")
+    inputString = Application.WorksheetFunction.Trim(inputString)
 
+    remainingText = inputString
 
+    Do While Len(remainingText) > maxLineLen
+        ' Find last space within allowed length
+        breakPos = InStrRev(Left(remainingText, maxLineLen), " ")
 
+        If breakPos = 0 Then
+            ' No space found: keep searching forward until next space
+            breakPos = InStr(maxLineLen + 1, remainingText, " ")
+            
+            If breakPos = 0 Then
+                ' No more spaces at all: remaining text is one last word
+                Exit Do
+            End If
+        End If
+
+        chunk = Left(remainingText, breakPos - 1)
+        result = result & chunk & vbCrLf
+
+        remainingText = Mid(remainingText, breakPos + 1)
+        remainingText = Application.WorksheetFunction.Trim(remainingText)
+    Loop
+
+    If Len(remainingText) > 0 Then
+        result = result & remainingText
+    End If
+
+    formatLinesForUSFOS = result
+End Function
 
 
 

@@ -29,6 +29,8 @@ Sub Run_analysis()
     Dim ultimaLinha As Long
     Dim iter As Long
     Dim row As Long
+
+    On Error GoTo EH
     
     ' Sub to Disable calculations and screen updating
     TurnOnCalcs
@@ -72,6 +74,14 @@ Sub Run_analysis()
     
     ' Sub to Enable calculations and screen updating
     TurnOnCalcs
+    Exit Sub
+
+    EH:
+    On Error Resume Next
+    Close ' closes ALL open file handles in this VBA project
+    TurnOnCalcs
+    MsgBox "Error " & Err.Number & ": " & Err.Description
+
 End Sub
 
 Private Function InitializeIteration(row) As Integer
@@ -521,7 +531,7 @@ Sub writeAllElement(ByVal row As Long, ByVal PFPElementNumber As Long)
     Dim ultlinhaPFP As Long
     Dim verify As Boolean
     Dim k As Long
-    
+    ' TODO: Change the format applied in the worksheet
 
     ultlinhaPFP = shtPFP.Cells(Rows.Count, (row - 2) * 5 + 3).End(xlUp).row
     verify = True
@@ -564,7 +574,10 @@ Sub writeI3SidedElement(ByVal row As Long, ByVal PFPElementNumber As Long)
             ultlinhaPFP3Sided = shtPFP3sided.Cells(Rows.Count, scenarioColumnIndex).End(xlUp).row
 
             shtPFP3sided.Cells(ultlinhaPFP3Sided + 1, scenarioColumnIndex) = test_3sided_I
-            shtScriptUsfos.Cells(row, "M") = shtScriptUsfos.Cells(row, "M") & "     " & PFPElementNumber
+
+            rawString = shtScriptUsfos.Cells(row, "M") & "     " & PFPElementNumber
+            safeString = AuxMacros.formatLinesForUSFOS(rawString)
+            shtScriptUsfos.Cells(row, "M") = safeString
         End If
 
     End If
@@ -602,7 +615,10 @@ Sub writeBox3SidedElement(ByVal row As Long, ByVal PFPElementNumber As Long)
             ultlinhaPFP3Sided = shtPFP3sided.Cells(Rows.Count, scenarioColumnIndex).End(xlUp).row
 
             shtPFP3sided.Cells(ultlinhaPFP3Sided + 1, scenarioColumnIndex) = test_3sided_Box
-            shtScriptUsfos.Cells(row, "N") = shtScriptUsfos.Cells(row, "N") & "     " & PFPElementNumber
+
+            rawString = shtScriptUsfos.Cells(row, "N") & "     " & PFPElementNumber
+            safeString = AuxMacros.formatLinesForUSFOS(rawString)
+            shtScriptUsfos.Cells(row, "N") = safeString
         End If
 
     End If
@@ -626,6 +642,7 @@ Private Function IsElementAlready3SidedProtected(ByVal row As Long, ByVal elemen
     
     IsElementAlready3SidedProtected = False
 End Function
+
 Sub testIsElementAlready3SidedProtected()
     Dim row As Long
     Dim elementNumber As Long
@@ -920,7 +937,10 @@ Private Function ExtractLoadCaseData(ByVal BeltempFilePath As String) As Collect
     Set loadCaseData = New Collection
     
     BeltempFileHandle = FreeFile
+    
+    On Error GoTo CleanUp
     Open BeltempFilePath For Input As #BeltempFileHandle
+
     Do Until EOF(BeltempFileHandle)
         Line Input #BeltempFileHandle, currentLine
         If InStr(currentLine, "LCASETIM") Then
@@ -935,7 +955,13 @@ Private Function ExtractLoadCaseData(ByVal BeltempFilePath As String) As Collect
             loadCaseData.Add loadCaseTimeDetails
         End If
     Loop
-    Close #belTempFilePathHandle
+
+    CleanUp:
+        On Error Resume Next
+        Close #BeltempFileHandle
+        On Error GoTo 0
+
+    Close #BeltempFileHandle
     
     Set ExtractLoadCaseData = loadCaseData
 End Function
@@ -1094,7 +1120,6 @@ Private Sub WriteHeadFileContent(ByVal fileNum As Integer, ByVal row As Long)
         Print #fileNum, "'elementos com 3 lados (perfis box)"
         Print #fileNum, "'GroupDef   1001    Elem    " & shtScriptUsfos.Cells(row, "N") & ""
     End If
-    Close #fileNum
 
 End Sub
 
