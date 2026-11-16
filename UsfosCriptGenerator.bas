@@ -99,6 +99,12 @@ Private Sub ProcessCase(ByVal row As Long)
     
     ' Get info about last load case and last time
     BeltempFilePath = CaseFolder & "\" & BeltempFilename & ".fem"
+
+    if BeltempFilePath = "" Then 
+        MsgBox "Beltemp file path is empty. Head Usfos not updated for row " & row & ":" & scenarioName & " case."
+        Exit Sub
+    End If
+
     Set LastLoadCaseInfo = GetLastLoadCaseInfos(BeltempFilePath)
     lastLoadCaseTime = LastLoadCaseInfo("time")                    'last loadcase time
      
